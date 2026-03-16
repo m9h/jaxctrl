@@ -41,94 +41,9 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 
-from jaxctrl._tensor_ops import tensor_fold, tensor_unfold
-
-
-# ---------------------------------------------------------------------------
-# Matrix CARE / Lyapunov helpers (self-contained to avoid circular imports
-# with the Layer 1 modules; these call scipy-style routines via JAX).
-# ---------------------------------------------------------------------------
-
-
-def _solve_care_schur(
-    A: Float[Array, "n n"],
-    B: Float[Array, "n m"],
-    Q: Float[Array, "n n"],
-    R: Float[Array, "m m"],
-) -> Float[Array, "n n"]:
-    """Solve the continuous algebraic Riccati equation via the Hamiltonian.
-
-    Solves  A^T X + X A - X B R^{-1} B^T X + Q = 0  for X >= 0.
-
-    Uses an eigendecomposition of the Hamiltonian matrix::
-
-        H = [[  A,  -B R^{-1} B^T ],
-             [ -Q,  -A^T           ]]
-
-    The stable invariant subspace of H yields the solution X.
-
-    This is a JIT-compatible pure-JAX implementation (no scipy).
-    """
-    n = A.shape[0]
-    R_inv = jnp.linalg.inv(R)
-    S = B @ R_inv @ B.T
-
-    # Hamiltonian matrix.
-    H = jnp.block([
-        [A, -S],
-        [-Q, -A.T],
-    ])
-
-    # Eigendecomposition.
-    eigvals, eigvecs = jnp.linalg.eig(H)
-
-    # Select the n eigenvectors with negative real part (stable subspace).
-    # Sort by real part and take the first n.
-    order = jnp.argsort(eigvals.real)
-    stable_vecs = eigvecs[:, order[:n]]
-
-    # Partition into upper and lower blocks.
-    U1 = stable_vecs[:n, :]
-    U2 = stable_vecs[n:, :]
-
-    # X = U2 @ inv(U1).  Both blocks may be complex; take real part.
-    X = jnp.real(U2 @ jnp.linalg.inv(U1))
-
-    # Symmetrise for numerical hygiene.
-    X = (X + X.T) / 2.0
-    return X
-
-
-def _solve_lyapunov(
-    A: Float[Array, "n n"],
-    Q: Float[Array, "n n"],
-) -> Float[Array, "n n"]:
-    """Solve the continuous Lyapunov equation A X + X A^T + Q = 0.
-
-    Uses the Bartels-Stewart method via Schur decomposition.
-    Pure-JAX, JIT-compatible.
-    """
-    n = A.shape[0]
-
-    # Schur decomposition: A = U T U^H.
-    T, U = jax.scipy.linalg.schur(A, output='real')
-
-    # Transform: Q_bar = U^T Q U.
-    Q_bar = U.T @ Q @ U
-
-    # Solve the triangular Lyapunov equation T Y + Y T^T + Q_bar = 0
-    # column by column (backward substitution).
-    # For JIT compatibility we solve the vectorised form:
-    #   (I kron T + T kron I) vec(Y) = -vec(Q_bar)
-    I = jnp.eye(n)
-    M = jnp.kron(I, T) + jnp.kron(T, I)
-    y = jnp.linalg.solve(M, -Q_bar.ravel())
-    Y = y.reshape(n, n)
-
-    # Back-transform: X = U Y U^T.
-    X = U @ Y @ U.T
-    X = (X + X.T) / 2.0
-    return X
+from jaxctrl._lyapunov import solve_continuous_lyapunov
+from jaxctrl._riccati import solve_continuous_are
+from jaxctrl._tensor_ops import tensor_contract, tensor_fold, tensor_unfold
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +107,7 @@ def tensor_lyapunov(
         A_sq = A_mat
         Q_sq = Q_mat
 
-    Y = _solve_lyapunov(A_sq, Q_sq)
+    Y = solve_continuous_lyapunov(A_sq, Q_sq)
 
     # Extract the meaningful part and fold.
     Y_trimmed = Y[: Q_mat.shape[0], : Q_mat.shape[1]]
@@ -280,8 +195,6 @@ def solve_arte(
 
     # A_lin is now (n,); reshape to (n, n) by interpreting as A_lin_{ij}.
     # More precisely: contract all but modes 0 and 1 with uniform vector.
-    from jaxctrl._tensor_ops import tensor_contract
-
     contraction_modes = tuple(range(2, A.ndim))
     if len(contraction_modes) > 0:
         uniform = jnp.ones(n) / jnp.sqrt(n)
@@ -307,7 +220,7 @@ def solve_arte(
     Q_lin = (Q_lin + Q_lin.T) / 2.0
 
     # Solve the standard CARE.
-    X = _solve_care_schur(A_lin_mat, B, Q_lin, R)
+    X = solve_continuous_are(A_lin_mat, B, Q_lin, R)
 
     return X
 
