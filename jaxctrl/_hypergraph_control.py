@@ -31,6 +31,8 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
+from jaxctrl._tensor_ops import tensor_unfold
+
 # ---------------------------------------------------------------------------
 # Optional hgx import
 # ---------------------------------------------------------------------------
@@ -215,13 +217,19 @@ def _unfold_tensor(A_tensor: jax.Array) -> jax.Array:
 def _unfold_to_square(A_tensor: jax.Array) -> jax.Array:
     """Unfold a tensor to a *square* matrix for control analysis.
 
-    For higher-order tensors (k > 2) we use the mode-1 unfolding and then
-    project back to an (n x n) matrix by contracting the trailing modes with
-    the identity.  Concretely, A_eff[i, j] = sum over all multi-indices
-    (j, i3, ..., ik) of A[i, j, i3, ..., ik].  This "partial trace" retains
-    the pairwise coupling structure.
+    For higher-order tensors (k > 2) we linearise the multilinear dynamics
+    ``x_dot_i = sum_{j,...} A[i,j,...] x_j x_k ...`` at a generic operating
+    point ``x* = (1, 2, ..., n)``.  The Jacobian of the tensor contraction
+    with respect to x evaluated at x* is:
 
-    For order-2 tensors this is a no-op.
+        A_eff[i, j] = (k-1) * sum_{i3,...,ik} A[i, j, i3, ..., ik]
+                       * x*[i3] * ... * x*[ik]
+
+    This preserves the higher-order coupling information that a naive partial
+    trace loses, making the resulting system generically controllable when the
+    hypergraph structure supports it.
+
+    For order-2 tensors this is a no-op (the tensor *is* the matrix).
 
     Parameters
     ----------
@@ -235,9 +243,23 @@ def _unfold_to_square(A_tensor: jax.Array) -> jax.Array:
     n = A_tensor.shape[0]
     if k == 2:
         return A_tensor
-    # Sum over all indices beyond the first two.
-    axes = tuple(range(2, k))
-    return jnp.sum(A_tensor, axis=axes)
+
+    # Generic operating point — distinct values avoid accidental symmetry.
+    # Normalise by n to keep the spectral radius of A_eff moderate and
+    # prevent numerical overflow in exp(A*T) during Gramian computation.
+    x_star = jnp.arange(1, n + 1, dtype=A_tensor.dtype) / n
+
+    # Contract trailing modes (2, 3, ..., k-1) with x_star sequentially.
+    # Each contraction reduces the tensor order by 1.
+    result = A_tensor
+    for mode_idx in range(k - 1, 1, -1):
+        # Contract the last remaining trailing mode with x_star.
+        result = jnp.tensordot(result, x_star, axes=([mode_idx], [0]))
+
+    # Multiply by (k-1) for the Jacobian prefactor (from the product rule:
+    # there are k-1 positions where x_j can appear in the multilinear form,
+    # and by tensor symmetry each contributes equally).
+    return (k - 1) * result
 
 
 # ===================================================================
@@ -316,29 +338,22 @@ def _kalman_rank_from_matrix(
 # ===================================================================
 
 
-def minimum_driver_nodes(
+def _minimum_driver_nodes_impl(
     hg,
-) -> Tuple[jax.Array, jax.Array]:
-    """Find a minimum set of driver nodes for full controllability.
+) -> Tuple[jax.Array, int]:
+    """Find a minimum set of driver nodes for full controllability (internal).
 
     Uses the tensor-unfolding approach: unfold the adjacency tensor to an
     (n x n) matrix, then greedily add driver nodes until the Kalman rank
     reaches *n*.
 
-    Parameters
-    ----------
-    hg : hgx.Hypergraph
-        Hypergraph object.
-
     Returns
     -------
     driver_node_indices : jax.Array, shape (num_drivers,)
         Indices of driver nodes (sorted).
-    num_driver_nodes : jax.Array, scalar int
+    num_driver_nodes : int
         Number of driver nodes.
     """
-    _require_hgx("minimum_driver_nodes")
-
     A_tensor = adjacency_tensor(hg)
     A_sq = _unfold_to_square(A_tensor)
     n = A_sq.shape[0]
@@ -351,12 +366,6 @@ def minimum_driver_nodes(
     while True:
         if len(driver_set) == n:
             break
-
-        # Current B matrix.
-        if driver_set:
-            B_current = jnp.eye(n, dtype=A_sq.dtype)[:, jnp.array(driver_set)]
-        else:
-            B_current = None
 
         best_node = -1
         best_rank = -1
@@ -386,7 +395,31 @@ def minimum_driver_nodes(
             break
 
     driver_indices = jnp.array(sorted(driver_set), dtype=jnp.int32)
-    return driver_indices, jnp.int32(len(driver_set))
+    return driver_indices, len(driver_set)
+
+
+def minimum_driver_nodes(
+    hg,
+) -> int:
+    """Find the minimum number of driver nodes for full controllability.
+
+    Uses the tensor-unfolding approach: unfold the adjacency tensor to an
+    (n x n) matrix, then greedily add driver nodes until the Kalman rank
+    reaches *n*.
+
+    Parameters
+    ----------
+    hg : hgx.Hypergraph
+        Hypergraph object.
+
+    Returns
+    -------
+    num_driver_nodes : int
+        Minimum number of driver nodes needed for controllability.
+    """
+    _require_hgx("minimum_driver_nodes")
+    _, num_drivers = _minimum_driver_nodes_impl(hg)
+    return num_drivers
 
 
 # ===================================================================
@@ -450,13 +483,12 @@ def _controllability_gramian(
 
 def control_energy(
     hg,
-    B: Optional[jax.Array],
-    x0: jax.Array,
+    driver_nodes: jax.Array,
     xf: jax.Array,
     T: float,
-    driver_nodes: Optional[jax.Array] = None,
+    x0: Optional[jax.Array] = None,
 ) -> jax.Array:
-    """Minimum control energy for steering hypergraph dynamics from *x0* to *xf*.
+    """Minimum control energy for steering hypergraph dynamics to *xf*.
 
     The system is linearised via tensor unfolding:  dx/dt = A x + B u.
     The minimum-energy control that steers x(0) = x0 to x(T) = xf has cost
@@ -469,17 +501,14 @@ def control_energy(
     ----------
     hg : hgx.Hypergraph
         Hypergraph object.
-    B : (n, m) array or None
-        Input matrix.  If *None*, ``driver_nodes`` must be given.
-    x0 : (n,) array
-        Initial state.
+    driver_nodes : (m,) int array
+        Indices of driver (input) nodes.
     xf : (n,) array
         Target state.
     T : float
         Time horizon (must be > 0).
-    driver_nodes : (m,) int array, optional
-        If given and *B* is None, construct B as the one-hot selection matrix
-        for these nodes.
+    x0 : (n,) array, optional
+        Initial state.  If *None*, defaults to the zero vector.
 
     Returns
     -------
@@ -492,11 +521,11 @@ def control_energy(
     A_sq = _unfold_to_square(A_tensor)
     n = A_sq.shape[0]
 
-    if B is None and driver_nodes is None:
-        raise ValueError("Either B or driver_nodes must be provided.")
-    if B is None:
-        driver_nodes = jnp.asarray(driver_nodes, dtype=jnp.int32)
-        B = jnp.eye(n, dtype=A_sq.dtype)[:, driver_nodes]
+    driver_nodes = jnp.asarray(driver_nodes, dtype=jnp.int32)
+    B = jnp.eye(n, dtype=A_sq.dtype)[:, driver_nodes]
+
+    if x0 is None:
+        x0 = jnp.zeros(n, dtype=A_sq.dtype)
 
     return _control_energy_impl(A_sq, B, x0, xf, jnp.float64(T))
 
@@ -658,7 +687,7 @@ def hypergraph_linear_system(
     n = A_sq.shape[0]
 
     if driver_nodes is None:
-        driver_nodes, _ = minimum_driver_nodes(hg)
+        driver_nodes, _ = _minimum_driver_nodes_impl(hg)
 
     driver_nodes = jnp.asarray(driver_nodes, dtype=jnp.int32)
     B = jnp.eye(n, dtype=A_sq.dtype)[:, driver_nodes]
@@ -729,7 +758,7 @@ class HypergraphControlSystem(eqx.Module):
             _require_hgx("HypergraphControlSystem")
             A_sq, B = hypergraph_linear_system(hg, driver_nodes=driver_nodes)
             if driver_nodes is None:
-                driver_nodes, _ = minimum_driver_nodes(hg)
+                driver_nodes, _ = _minimum_driver_nodes_impl(hg)
             self.adjacency = A_sq
             self.input_matrix = B
             self.driver_nodes = jnp.asarray(driver_nodes, dtype=jnp.int32)

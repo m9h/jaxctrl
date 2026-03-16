@@ -94,7 +94,6 @@ class TestCompleteHypergraph:
             atol=1e-6,
         ), "Adjacency tensor not symmetric under swap of indices 1,2"
 
-    @pytest.mark.xfail(reason="hypergraph tensor unfolding controllability needs work")
     def test_controllability_with_driver_node(self):
         """With node 0 as driver, the complete hypergraph should be controllable.
 
@@ -138,7 +137,6 @@ class TestPathHypergraph:
     Therefore minimum_driver_nodes should return 1.
     """
 
-    @pytest.mark.xfail(reason="hypergraph tensor unfolding controllability needs work")
     def test_minimum_driver_nodes_path(self):
         """Path of 3 nodes needs 1 driver node."""
         H = jnp.array([[1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
@@ -149,7 +147,6 @@ class TestPathHypergraph:
             f"Expected 1 driver node for path graph, got {n_drivers}"
         )
 
-    @pytest.mark.xfail(reason="hypergraph tensor unfolding controllability needs work")
     def test_disconnected_needs_two_drivers(self):
         """Two disjoint edges {0,1} and {2,3} need at least 2 driver nodes.
 
@@ -178,7 +175,6 @@ class TestPathHypergraph:
 class TestHypergraphControlEnergy:
     """Control energy for a hypergraph with a known driver node."""
 
-    @pytest.mark.xfail(reason="hypergraph tensor unfolding controllability needs work")
     def test_energy_is_finite(self):
         """For a controllable system, the control energy should be finite."""
         H = jnp.ones((4, 1))
@@ -189,7 +185,6 @@ class TestHypergraphControlEnergy:
         E = control_energy(hg, driver_nodes, x_target, T=1.0)
         assert jnp.isfinite(E), f"Energy should be finite, got {E}"
 
-    @pytest.mark.xfail(reason="hypergraph tensor unfolding controllability needs work")
     def test_energy_is_nonnegative(self):
         """Control energy must be non-negative (it is a quadratic form)."""
         H = jnp.array([[1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
@@ -200,7 +195,6 @@ class TestHypergraphControlEnergy:
         E = control_energy(hg, driver_nodes, x_target, T=1.0)
         assert E >= -1e-8, f"Energy should be >= 0, got {E}"
 
-    @pytest.mark.xfail(reason="hypergraph tensor unfolding controllability needs work")
     def test_zero_target_zero_energy(self):
         """Reaching the origin from the origin requires zero energy."""
         H = jnp.ones((3, 1))

@@ -121,24 +121,24 @@ def tensor_power_method(
         y = tensor_contract(T, x, contraction_modes)
         return jnp.dot(x, y)
 
-    # Use lax.fori_loop for JIT compatibility.  The tolerance-based early
-    # exit is approximated by freezing the iterate once converged (the
-    # answer is numerically stable once the change drops below tol).
+    # Use lax.fori_loop for JIT compatibility.  We iterate for all
+    # max_iters; the shifted power method converges monotonically so
+    # extra iterations are harmless and ensure the eigenvector is fully
+    # cleaned up (eigenvalue converges faster than eigenvector).
     def fori_body(i, carry):
-        x, lam_prev = carry
+        x, _ = carry
         y = tensor_contract(T, x, contraction_modes)
         y = y + alpha * x
         x_new = y / jnp.linalg.norm(y)
         lam_new = _eigenvalue(x_new)
-        # Once converged, keep returning the same value (no early exit in
-        # fori_loop, but the answer is stable).
-        converged = jnp.abs(lam_new - lam_prev) < tol
-        x_out = jnp.where(converged, x, x_new)
-        lam_out = jnp.where(converged, lam_prev, lam_new)
-        return (x_out, lam_out)
+        return (x_new, lam_new)
 
     lam0 = _eigenvalue(x0)
     x_final, lam_final = jax.lax.fori_loop(0, max_iters, fori_body, (x0, lam0))
+
+    # Rayleigh quotient refinement: recompute eigenvalue from the
+    # converged eigenvector for maximum accuracy.
+    lam_final = _eigenvalue(x_final)
 
     return lam_final, x_final
 
@@ -148,12 +148,13 @@ def tensor_power_method(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(1, 2, 3))
+@functools.partial(jax.jit, static_argnums=(1, 2, 3, 4))
 def z_eigenvalues(
     T: Float[Array, "..."],
     num_eigvals: int = 1,
-    max_iters: int = 1000,
-    tol: float = 1e-6,
+    max_iters: int = 5000,
+    tol: float = 1e-10,
+    num_restarts: int = 8,
     key: Optional[PRNGKeyArray] = None,
 ) -> tuple[Float[Array, " k"], Float[Array, "k n"]]:
     """Compute Z-eigenvalues of a supersymmetric tensor.
@@ -163,18 +164,17 @@ def z_eigenvalues(
         T x x ... x = lam * x  and  ||x|| = 1
 
     The solver uses the SS-HOPM (shifted symmetric higher-order power
-    method) from Kolda & Mayo (2011) with a deflation strategy to extract
-    multiple eigenpairs.
+    method) from Kolda & Mayo (2011) with an orthogonal projection
+    deflation strategy to extract multiple eigenpairs.
 
-    **Deflation.**  After finding an eigenpair (lam, x), the tensor is
-    deflated::
+    **Deflation.**  After finding an eigenpair (lam_i, v_i), subsequent
+    eigenpairs are found by running the power method with orthogonal
+    projection that removes components along all previously found
+    eigenvectors at each iteration.  This avoids the off-diagonal
+    contamination that rank-1 tensor subtraction deflation can cause.
 
-        T <- T - lam * outer(x, x, ..., x)
-
-    and the power method is restarted to find the next eigenpair.  This
-    is an *approximate* deflation; for odd-order tensors it is exact, but
-    for even-order tensors the deflated tensor may not be supersymmetric.
-    The implementation re-symmetrises after each deflation step.
+    Multiple random restarts are used per eigenpair to improve
+    robustness.
 
     Parameters
     ----------
@@ -186,6 +186,9 @@ def z_eigenvalues(
         Maximum SS-HOPM iterations per eigenpair.
     tol : float
         Convergence tolerance.
+    num_restarts : int
+        Number of random restarts per eigenpair.  The restart yielding
+        the largest eigenvalue magnitude is kept.
     key : PRNGKey, optional
         Random key for initialisation.
 
@@ -202,29 +205,89 @@ def z_eigenvalues(
     if key is None:
         key = jax.random.PRNGKey(0)
 
-    def _outer_k(x: Float[Array, " n"]) -> Float[Array, "..."]:
-        """Construct the rank-1 supersymmetric tensor x (x) x ... (x) x."""
-        result = x
-        for _ in range(order - 1):
-            result = jnp.tensordot(result, x, axes=0)
-        return result
+    # Compute a safe shift from the Frobenius norm.
+    frob = jnp.sqrt(jnp.sum(T ** 2))
+    alpha = frob  # conservative positive shift
+
+    contraction_modes = tuple(range(1, order))
+
+    def _eigenvalue(x: Float[Array, " n"]) -> Float[Array, ""]:
+        y = tensor_contract(T, x, contraction_modes)
+        return jnp.dot(x, y)
+
+    def _project_out(x, found_vecs, num_found):
+        """Project x orthogonal to the first num_found rows of found_vecs."""
+        def body_fn(i, x_cur):
+            vi = found_vecs[i]
+            # Only project if i < num_found (mask with where).
+            coeff = jnp.dot(x_cur, vi)
+            x_proj = x_cur - coeff * vi
+            return jnp.where(i < num_found, x_proj, x_cur)
+        return jax.lax.fori_loop(0, found_vecs.shape[0], body_fn, x)
+
+    def _power_method_deflated(x0, found_vecs, num_found):
+        """SS-HOPM with orthogonal projection against found eigenvectors."""
+        def fori_body(i, carry):
+            x, lam_prev = carry
+            y = tensor_contract(T, x, contraction_modes)
+            y = y + alpha * x
+            # Project out previously found eigenvectors.
+            y = _project_out(y, found_vecs, num_found)
+            norm_y = jnp.linalg.norm(y)
+            x_new = jnp.where(norm_y > 1e-14, y / norm_y, x)
+            lam_new = _eigenvalue(x_new)
+            converged = jnp.abs(lam_new - lam_prev) < tol
+            x_out = jnp.where(converged, x, x_new)
+            lam_out = jnp.where(converged, lam_prev, lam_new)
+            return (x_out, lam_out)
+
+        # Project initial vector orthogonal to found eigenvectors.
+        x0 = _project_out(x0, found_vecs, num_found)
+        norm_x0 = jnp.linalg.norm(x0)
+        x0 = jnp.where(norm_x0 > 1e-14, x0 / norm_x0, x0)
+
+        lam0 = _eigenvalue(x0)
+        x_final, lam_final = jax.lax.fori_loop(
+            0, max_iters, fori_body, (x0, lam0)
+        )
+        # Rayleigh quotient refinement.
+        lam_final = _eigenvalue(x_final)
+        return lam_final, x_final
+
+    def _multi_restart_deflated(subkey, found_vecs, num_found):
+        """Run multiple restarts and pick the result with largest |lambda|."""
+        restart_keys = jax.random.split(subkey, num_restarts)
+
+        def _single_restart(rkey):
+            x0 = jax.random.normal(rkey, (n,))
+            x0 = x0 / jnp.linalg.norm(x0)
+            return _power_method_deflated(x0, found_vecs, num_found)
+
+        all_lams, all_vecs = jax.vmap(_single_restart)(restart_keys)
+        best_idx = jnp.argmax(jnp.abs(all_lams))
+        return all_lams[best_idx], all_vecs[best_idx]
 
     def scan_body(carry, _):
-        T_cur, key_cur = carry
+        found_vecs, found_lams, num_found, key_cur = carry
         key_cur, subkey = jax.random.split(key_cur)
-        lam, vec = tensor_power_method(
-            T_cur, x0=None, max_iters=max_iters, tol=tol, key=subkey
-        )
-        # Deflate: remove the found component.
-        T_deflated = T_cur - lam * _outer_k(vec)
-        # Re-symmetrise (average over permutations).
-        from jaxctrl._tensor_ops import symmetrize_tensor
 
-        T_deflated = symmetrize_tensor(T_deflated)
-        return (T_deflated, key_cur), (lam, vec)
+        lam, vec = _multi_restart_deflated(subkey, found_vecs, num_found)
 
-    (_, _), (eigenvalues, eigenvectors) = jax.lax.scan(
-        scan_body, (T, key), None, length=num_eigvals
+        # Store the found eigenvector.
+        found_vecs = found_vecs.at[num_found].set(vec)
+        found_lams = found_lams.at[num_found].set(lam)
+        num_found = num_found + 1
+
+        return (found_vecs, found_lams, num_found, key_cur), (lam, vec)
+
+    # Initialise storage for found eigenvectors.
+    found_vecs_init = jnp.zeros((num_eigvals, n))
+    found_lams_init = jnp.zeros(num_eigvals)
+    num_found_init = jnp.array(0, dtype=jnp.int32)
+
+    init_carry = (found_vecs_init, found_lams_init, num_found_init, key)
+    _, (eigenvalues, eigenvectors) = jax.lax.scan(
+        scan_body, init_carry, None, length=num_eigvals
     )
 
     # Sort by descending magnitude.
@@ -357,11 +420,12 @@ def h_eigenvalues(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(1, 2))
+@functools.partial(jax.jit, static_argnums=(1, 2, 3))
 def spectral_radius(
     T: Float[Array, "..."],
-    max_iters: int = 1000,
-    tol: float = 1e-6,
+    max_iters: int = 5000,
+    tol: float = 1e-10,
+    num_restarts: int = 8,
     key: Optional[PRNGKeyArray] = None,
 ) -> Float[Array, ""]:
     """Spectral radius: largest Z-eigenvalue magnitude.
@@ -371,6 +435,9 @@ def spectral_radius(
     stable at the origin when the spectral radius of A (appropriately
     scaled) is less than 1.
 
+    Multiple random restarts are used to increase the probability of
+    finding the globally dominant eigenvalue.
+
     Parameters
     ----------
     T : array, shape (n, ..., n)
@@ -379,6 +446,9 @@ def spectral_radius(
         Maximum power-method iterations.
     tol : float
         Convergence tolerance.
+    num_restarts : int
+        Number of random restarts.  The restart yielding the largest
+        eigenvalue magnitude is kept.
     key : PRNGKey, optional
         Random key.
 
@@ -387,5 +457,17 @@ def spectral_radius(
     scalar
         The spectral radius (largest |Z-eigenvalue|).
     """
-    lam, _ = tensor_power_method(T, max_iters=max_iters, tol=tol, key=key)
-    return jnp.abs(lam)
+    if key is None:
+        key = jax.random.PRNGKey(0)
+
+    n = T.shape[0]
+    restart_keys = jax.random.split(key, num_restarts)
+
+    def _single_restart(rkey):
+        lam, _ = tensor_power_method(
+            T, max_iters=max_iters, tol=tol, key=rkey
+        )
+        return jnp.abs(lam)
+
+    all_rho = jax.vmap(_single_restart)(restart_keys)
+    return jnp.max(all_rho)

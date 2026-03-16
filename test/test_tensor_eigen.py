@@ -22,7 +22,6 @@ Sections
 
 import jax
 import jax.numpy as jnp
-import pytest
 from jaxctrl._tensor_eigen import (
     spectral_radius,
     tensor_power_method,
@@ -30,11 +29,9 @@ from jaxctrl._tensor_eigen import (
 )
 
 
-# Note: z_eigenvalues deflation and the power method convergence on
-# sparse diagonal tensors need algorithmic iteration. The power method
-# converges to a local eigenpair depending on initialization; deflation
-# can distort the tensor. These are marked xfail until the algorithms
-# are hardened.
+# Note: z_eigenvalues uses orthogonal projection deflation with multiple
+# random restarts.  The spectral_radius function also uses multiple
+# restarts to find the globally dominant eigenvalue.
 
 # -----------------------------------------------------------------------
 # 1. Identity tensor
@@ -59,27 +56,25 @@ class TestIdentityTensorEigenvalues:
     So each standard basis vector e_i is a Z-eigenvector with lambda = 1.
     """
 
-    @pytest.mark.xfail(reason="tensor eigen deflation needs algorithmic work")
     def test_identity_3rd_order_2d(self):
         """3rd-order 2D identity tensor has Z-eigenvalue 1."""
         I_tensor = jnp.zeros((2, 2, 2))
         I_tensor = I_tensor.at[0, 0, 0].set(1.0)
         I_tensor = I_tensor.at[1, 1, 1].set(1.0)
 
-        eigvals = z_eigenvalues(I_tensor)
+        eigvals, eigvecs = z_eigenvalues(I_tensor)
         # All Z-eigenvalues should be 1
         assert jnp.allclose(jnp.sort(jnp.abs(eigvals))[-1], 1.0, atol=1e-4), (
             f"Expected leading Z-eigenvalue 1.0, got {eigvals}"
         )
 
-    @pytest.mark.xfail(reason="tensor eigen deflation needs algorithmic work")
     def test_identity_3rd_order_3d(self):
         """3rd-order 3D identity tensor has Z-eigenvalue 1 with multiplicity 3."""
         I_tensor = jnp.zeros((3, 3, 3))
         for i in range(3):
             I_tensor = I_tensor.at[i, i, i].set(1.0)
 
-        eigvals = z_eigenvalues(I_tensor)
+        eigvals, eigvecs = z_eigenvalues(I_tensor)
         # All eigenvalues should be close to 1
         assert jnp.all(jnp.abs(eigvals - 1.0) < 1e-3) or (
             jnp.sum(jnp.abs(eigvals - 1.0) < 1e-3) >= 3
@@ -105,20 +100,18 @@ class TestDiagonalTensorEigenvalues:
     So the Z-eigenvalues are exactly the diagonal entries d_i.
     """
 
-    @pytest.mark.xfail(reason="tensor eigen deflation needs algorithmic work")
     def test_diagonal_3rd_order_2d(self):
         """Diagonal tensor with d = [2, 5] has Z-eigenvalues {2, 5}."""
         T = jnp.zeros((2, 2, 2))
         T = T.at[0, 0, 0].set(2.0)
         T = T.at[1, 1, 1].set(5.0)
 
-        eigvals = z_eigenvalues(T)
+        eigvals, eigvecs = z_eigenvalues(T)
         eigvals_sorted = jnp.sort(jnp.real(eigvals))
         assert jnp.allclose(eigvals_sorted[-1], 5.0, atol=1e-3), (
             f"Expected largest Z-eigenvalue 5.0, got {eigvals_sorted[-1]}"
         )
 
-    @pytest.mark.xfail(reason="tensor eigen deflation needs algorithmic work")
     def test_diagonal_3rd_order_3d(self):
         """Diagonal tensor with d = [1, 3, 7] has Z-eigenvalues {1, 3, 7}."""
         T = jnp.zeros((3, 3, 3))
@@ -126,7 +119,7 @@ class TestDiagonalTensorEigenvalues:
         T = T.at[1, 1, 1].set(3.0)
         T = T.at[2, 2, 2].set(7.0)
 
-        eigvals = z_eigenvalues(T)
+        eigvals, eigvecs = z_eigenvalues(T)
         eigvals_sorted = jnp.sort(jnp.real(eigvals))
 
         # The set of Z-eigenvalues should contain 1, 3, 7
@@ -150,7 +143,6 @@ class TestSpectralRadius:
         Spectral radius = max(|2|, |-5|, |3|) = 5.
     """
 
-    @pytest.mark.xfail(reason="tensor eigen deflation needs algorithmic work")
     def test_spectral_radius_diagonal(self):
         """Spectral radius of diag(2, 5, 3) tensor should be 5.
 
@@ -221,7 +213,6 @@ class TestPowerMethod:
             f"Expected eigenvector ~ [0, +/-1], got {eigvec}"
         )
 
-    @pytest.mark.xfail(reason="tensor eigen deflation needs algorithmic work")
     def test_power_method_satisfies_eigenvalue_equation(self):
         r"""Verify T x^{k-1} = lambda x for the computed eigenpair.
 
@@ -232,7 +223,9 @@ class TestPowerMethod:
         T = T.at[1, 1, 1].set(5.0)
         T = T.at[2, 2, 2].set(3.0)
 
-        eigval, eigvec = tensor_power_method(T, key=jax.random.PRNGKey(1))
+        eigval, eigvec = tensor_power_method(
+            T, max_iters=5000, tol=1e-10, key=jax.random.PRNGKey(1)
+        )
 
         # Compute T x^2
         Tx2 = jnp.einsum("ijk,j,k->i", T, eigvec, eigvec)
