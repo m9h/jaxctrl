@@ -149,11 +149,10 @@ def is_stabilizable(
         sI_A = s * jnp.eye(n, dtype=complex_dtype) - A_c
         M = jnp.concatenate([sI_A, B_c], axis=1)
         sv = jnp.linalg.svd(M, compute_uv=False)
-        threshold = jnp.where(
-            tol is not None,
-            tol,
-            n * jnp.max(jnp.abs(sv)) * jnp.finfo(jnp.float64).eps,
-        )
+        if tol is not None:
+            threshold = tol
+        else:
+            threshold = n * jnp.max(jnp.abs(sv)) * jnp.finfo(jnp.float64).eps
         rank = jnp.sum(sv > threshold)
         return rank >= n
 
