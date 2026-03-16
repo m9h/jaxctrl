@@ -10,6 +10,8 @@ Sections
 3. Einstein product
 4. Symmetrisation under index permutation
 5. Khatri-Rao product
+6. n-mode product (mode_dot)
+7. HOSVD and Tucker reconstruction
 """
 
 import jax
@@ -17,11 +19,14 @@ import jax.numpy as jnp
 import pytest
 from jaxctrl._tensor_ops import (
     einstein_product,
+    hosvd,
     khatri_rao,
+    mode_dot,
     symmetrize_tensor,
     tensor_contract,
     tensor_fold,
     tensor_unfold,
+    tucker_to_tensor,
 )
 
 
@@ -345,4 +350,100 @@ class TestKhatriRao:
 
         assert jnp.allclose(result, expected, atol=1e-5), (
             f"Khatri-Rao does not match manual column-wise Kronecker"
+        )
+
+
+# -----------------------------------------------------------------------
+# 6. n-mode product (mode_dot)
+# -----------------------------------------------------------------------
+
+
+class TestModeDot:
+    r"""n-mode product of a tensor with a matrix or vector.
+
+    (T x_n U)_{...j...} = sum_k T_{...k...} U_{j,k}
+    """
+
+    def test_matrix_mode0(self):
+        """mode_dot with a (J, I_0) matrix along mode 0 changes dim 0."""
+        T = jnp.arange(24.0).reshape(2, 3, 4)
+        U = jnp.ones((5, 2))
+        result = mode_dot(T, U, 0)
+        assert result.shape == (5, 3, 4), f"Expected (5,3,4), got {result.shape}"
+
+    def test_vector_contraction(self):
+        """mode_dot with a vector contracts that mode (reduces ndim by 1)."""
+        T = jnp.arange(24.0).reshape(2, 3, 4)
+        v = jnp.array([1.0, 2.0])
+        result = mode_dot(T, v, 0)
+        expected = jnp.einsum("ijk,i->jk", T, v)
+        assert jnp.allclose(result, expected, atol=1e-6)
+
+    def test_identity_matrix(self):
+        """Multiplying by identity along any mode is a no-op."""
+        T = jnp.arange(8.0).reshape(2, 2, 2)
+        I = jnp.eye(2)
+        for mode in range(3):
+            result = mode_dot(T, I, mode)
+            assert jnp.allclose(result, T, atol=1e-10), (
+                f"Identity mode_dot changed tensor along mode {mode}"
+            )
+
+    def test_matches_einsum(self):
+        """mode_dot(T, U, 1) should match einsum('ijk,lj->ilk', T, U)."""
+        T = jnp.arange(24.0).reshape(2, 3, 4)
+        U = jnp.ones((5, 3))
+        result = mode_dot(T, U, 1)
+        expected = jnp.einsum("ijk,lj->ilk", T, U)
+        assert jnp.allclose(result, expected, atol=1e-6)
+
+
+# -----------------------------------------------------------------------
+# 7. HOSVD and Tucker reconstruction
+# -----------------------------------------------------------------------
+
+
+class TestHOSVD:
+    """HOSVD computes Tucker decomposition via mode-wise SVD."""
+
+    def test_perfect_reconstruction(self):
+        """Full-rank HOSVD should reconstruct the original tensor exactly."""
+        T = jnp.arange(24.0).reshape(2, 3, 4)
+        core, factors = hosvd(T)
+        T_rec = tucker_to_tensor(core, factors)
+        assert jnp.allclose(T_rec, T, atol=1e-4), (
+            f"Reconstruction error: {jnp.linalg.norm(T_rec - T)}"
+        )
+
+    def test_truncated_rank(self):
+        """Truncated HOSVD should have a smaller core."""
+        T = jnp.arange(24.0).reshape(2, 3, 4)
+        core, factors = hosvd(T, ranks=[2, 2, 2])
+        assert core.shape == (2, 2, 2), f"Expected core (2,2,2), got {core.shape}"
+        assert factors[0].shape == (2, 2)
+        assert factors[1].shape == (3, 2)
+        assert factors[2].shape == (4, 2)
+
+    def test_factor_orthogonality(self):
+        """HOSVD factor matrices should have orthonormal columns."""
+        key = jax.random.PRNGKey(0)
+        T = jax.random.normal(key, (4, 5, 6))
+        _, factors = hosvd(T)
+        for i, U in enumerate(factors):
+            gram = U.T @ U
+            assert jnp.allclose(gram, jnp.eye(gram.shape[0]), atol=1e-5), (
+                f"Factor {i} not orthogonal"
+            )
+
+    def test_rank1_tensor(self):
+        """A rank-1 tensor should be perfectly captured by rank [1,1,1]."""
+        a = jnp.array([1.0, 2.0])
+        b = jnp.array([3.0, 4.0, 5.0])
+        c = jnp.array([6.0, 7.0])
+        T = jnp.einsum("i,j,k->ijk", a, b, c)
+
+        core, factors = hosvd(T, ranks=[1, 1, 1])
+        T_rec = tucker_to_tensor(core, factors)
+        assert jnp.allclose(T_rec, T, atol=1e-4), (
+            f"Rank-1 reconstruction error: {jnp.linalg.norm(T_rec - T)}"
         )

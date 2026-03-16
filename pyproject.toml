@@ -1,7 +1,7 @@
 [project]
 name = "jaxctrl"
 version = "0.1.0"
-description = "Differentiable control theory in JAX: Lyapunov, Riccati, Gramians, tensor control, and hypergraph controllability."
+description = "Differentiable control theory in JAX: system identification, Lyapunov, Riccati, Gramians, tensor control, and hypergraph controllability."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"

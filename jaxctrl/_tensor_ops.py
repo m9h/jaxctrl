@@ -271,6 +271,117 @@ def khatri_rao(
 
 
 # ---------------------------------------------------------------------------
+# n-mode product
+# ---------------------------------------------------------------------------
+
+
+@functools.partial(jax.jit, static_argnums=(2,))
+def mode_dot(
+    tensor: Float[Array, "..."],
+    matrix_or_vector: Float[Array, "..."],
+    mode: int,
+) -> Float[Array, "..."]:
+    """n-mode product of a tensor with a matrix or vector.
+
+    The n-mode product of tensor T with matrix U along mode *n*
+    replaces the mode-*n* fibers by U times those fibers:
+
+        (T x_n U)_{i_0 ... i_{n-1} j i_{n+1} ...}
+            = sum_k T_{i_0 ... k ... } U_{j,k}
+
+    For a vector v (1-D) the result has one fewer dimension (contraction).
+
+    Parameters
+    ----------
+    tensor : array
+        Input tensor.
+    matrix_or_vector : array
+        If 2-D (J, I_n): replaces dimension n of size I_n with size J.
+        If 1-D (I_n,): contracts along mode n.
+    mode : int
+        The mode along which to apply the product.
+
+    Returns
+    -------
+    array
+    """
+    if matrix_or_vector.ndim == 2:
+        res = jnp.tensordot(tensor, matrix_or_vector, axes=(mode, 1))
+        return jnp.moveaxis(res, -1, mode)
+    return jnp.tensordot(tensor, matrix_or_vector, axes=(mode, 0))
+
+
+# ---------------------------------------------------------------------------
+# Tucker decomposition (HOSVD)
+# ---------------------------------------------------------------------------
+
+
+def hosvd(
+    tensor: Float[Array, "..."],
+    ranks: list[int] | None = None,
+) -> tuple[Float[Array, "..."], list[Float[Array, "..."]]]:
+    """Higher-Order Singular Value Decomposition (HOSVD).
+
+    Computes the Tucker decomposition via truncated SVD on each
+    mode-unfolding.
+
+    Parameters
+    ----------
+    tensor : array
+        Input tensor of arbitrary order.
+    ranks : list of int, optional
+        Target rank for each mode.  If None, uses full rank.
+
+    Returns
+    -------
+    core : array
+        Core tensor (compressed).
+    factors : list of array
+        Factor matrices [U_0, U_1, ...] with shapes (n_i, r_i).
+    """
+    n_modes = tensor.ndim
+    if ranks is None:
+        ranks = list(tensor.shape)
+
+    factors = []
+    for m in range(n_modes):
+        unfolded = tensor_unfold(tensor, m)
+        U, _, _ = jnp.linalg.svd(unfolded, full_matrices=False)
+        factors.append(U[:, : ranks[m]])
+
+    # Core = tensor projected onto factor bases
+    core = tensor
+    for i, factor in enumerate(factors):
+        core = mode_dot(core, factor.T, i)
+
+    return core, factors
+
+
+def tucker_to_tensor(
+    core: Float[Array, "..."],
+    factors: list[Float[Array, "..."]],
+) -> Float[Array, "..."]:
+    """Reconstruct tensor from Tucker decomposition (core, factors).
+
+    Parameters
+    ----------
+    core : array
+        Core tensor.
+    factors : list of array
+        Factor matrices [U_0, U_1, ...].
+
+    Returns
+    -------
+    array
+        Full tensor = core x_0 U_0 x_1 U_1 ...
+    """
+    tensor = core
+    for i, factor in enumerate(factors):
+        tensor = mode_dot(tensor, factor, i)
+    return tensor
+
+
+# ---------------------------------------------------------------------------
 # Tensor trace
 # ---------------------------------------------------------------------------
 

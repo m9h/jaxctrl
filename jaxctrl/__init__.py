@@ -1,9 +1,10 @@
 """jaxctrl: Differentiable control theory in JAX.
 
-Three-layer architecture:
+Four-layer architecture:
 
+Layer 0 -- System identification (SINDy, DMD/Koopman)
 Layer 1 -- Control primitives (Lyapunov, Riccati, Gramians, controllability)
-Layer 2 -- Tensor control (tensor eigenvalues, Einstein products, ARTE)
+Layer 2 -- Tensor algebra + control (decompositions, eigenvalues, ARTE)
 Layer 3 -- Hypergraph control (integrates with hgx for higher-order networks)
 
 Built on the Kidger stack: Equinox, Lineax, Optimistix, Diffrax.
@@ -12,6 +13,14 @@ Built on the Kidger stack: Equinox, Lineax, Optimistix, Diffrax.
 from __future__ import annotations
 
 import importlib.metadata
+
+# Layer 0: System identification
+from jaxctrl._sysid import (
+    KoopmanEstimator,
+    SINDyOptimizer,
+    fourier_library,
+    polynomial_library,
+)
 
 # Layer 1: Control-theoretic matrix equation solvers
 from jaxctrl._lyapunov import (
@@ -40,15 +49,18 @@ from jaxctrl._controllability import (
     minimum_energy,
 )
 
-# Layer 2: Tensor control primitives
+# Layer 2: Tensor algebra and control primitives
 from jaxctrl._tensor_ops import (
     einstein_product,
+    hosvd,
     khatri_rao,
+    mode_dot,
     symmetrize_tensor,
     tensor_contract,
     tensor_fold,
     tensor_trace,
     tensor_unfold,
+    tucker_to_tensor,
 )
 from jaxctrl._tensor_eigen import (
     h_eigenvalues,
