@@ -349,15 +349,11 @@ class TestDiscreteARE:
             f"Closed-loop eigenvalues should be inside unit disk: {eigvals}"
         )
 
-    @pytest.mark.skip(reason="DARE with A=0 produces degenerate symplectic matrix")
     def test_identity_dare(self):
         r"""DARE with A=0 reduces to X = Q.
 
         A^T X A - X - ... + Q = 0
         With A=0: -X + Q = 0  =>  X = Q.
-
-        NOTE: Skipped because A=0 makes the symplectic matrix singular,
-        causing the eigendecomposition solver to produce NaN.
         """
         A = jnp.zeros((2, 2))
         B = jnp.eye(2)

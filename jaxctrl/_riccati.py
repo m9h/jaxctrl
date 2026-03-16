@@ -204,51 +204,46 @@ def solve_discrete_are(
 
 
 def _solve_dare_impl(A, B, Q, R):
-    """Symplectic pencil method for the DARE.
+    """Structure-preserving Doubling Algorithm (SDA) for the DARE.
 
-    Form the 2n x 2n symplectic matrix:
+    Solves the DARE without requiring A to be invertible, unlike the
+    symplectic pencil method.  Converges quadratically for any
+    stabilizable/detectable (A, B) pair.
 
-        Z = [[ A + B R^{-1} B^T (A^{-T}) Q,   -B R^{-1} B^T A^{-T} ],
-             [          -A^{-T} Q,                   A^{-T}           ]]
+    Algorithm::
 
-    and find the stable invariant subspace (eigenvalues inside the unit
-    circle).  Then X = U2 U1^{-1}.
+        A_k = A,  G_k = B R^{-1} B^T,  H_k = Q
+        repeat:
+            tmp = inv(I + G_k H_k)
+            A_{k+1} = A_k tmp A_k
+            G_{k+1} = G_k + A_k tmp G_k A_k^T
+            H_{k+1} = H_k + A_k^T H_k tmp A_k
+        X = H_converged
 
-    For JIT-friendliness we use the equivalent direct eigendecomposition.
+    References: Chu, Fan, Lin & Wang (2004), "Structure-preserving
+    algorithms for periodic discrete-time algebraic Riccati equations."
     """
     n = A.shape[0]
+    I_n = jnp.eye(n, dtype=A.dtype)
 
-    # Precompute
-    A_inv_T = jnp.linalg.inv(A.T)                 # A^{-T}
     R_inv = jnp.linalg.inv(R)
-    BR_inv_BT = B @ R_inv @ B.T                    # B R^{-1} B^T
+    G = B @ R_inv @ B.T
+    H = Q
+    Ak = A
 
-    # Symplectic matrix
-    Z11 = A + BR_inv_BT @ A_inv_T @ Q
-    Z12 = -BR_inv_BT @ A_inv_T
-    Z21 = -A_inv_T @ Q
-    Z22 = A_inv_T
+    max_iters = 100
 
-    Z = jnp.block([
-        [Z11, Z12],
-        [Z21, Z22],
-    ])
+    def body_fn(i, carry):
+        Ak, G, H = carry
+        tmp = jnp.linalg.solve(I_n + G @ H, I_n)
+        Ak_new = Ak @ tmp @ Ak
+        G_new = G + Ak @ tmp @ G @ Ak.T
+        H_new = H + Ak.T @ H @ tmp @ Ak
+        return (Ak_new, G_new, H_new)
 
-    # Eigendecomposition
-    eigvals, eigvecs = jnp.linalg.eig(Z)
+    Ak, G, H = jax.lax.fori_loop(0, max_iters, body_fn, (Ak, G, H))
 
-    # Sort by magnitude — stable eigenvalues (|lambda| < 1) first
-    mags = jnp.abs(eigvals)
-    order = jnp.argsort(mags)
-    eigvecs_sorted = eigvecs[:, order]
-
-    # Take the first n eigenvectors
-    U = eigvecs_sorted[:, :n]
-    U1 = U[:n, :]
-    U2 = U[n:, :]
-
-    X = jnp.real(U2 @ jnp.linalg.inv(U1))
-    X = _symmetrise(X)
+    X = _symmetrise(H)
     return X
 
 
