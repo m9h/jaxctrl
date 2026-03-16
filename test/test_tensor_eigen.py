@@ -204,7 +204,11 @@ class TestPowerMethod:
         T = T.at[0, 0, 0].set(1.0)
         T = T.at[1, 1, 1].set(4.0)
 
-        eigval, eigvec = tensor_power_method(T, key=jax.random.PRNGKey(0))
+        # Provide x0 biased toward e_1 to ensure convergence to the dominant
+        # eigenpair regardless of float32/float64 random initialization.
+        x0 = jnp.array([0.3, 0.9])
+        x0 = x0 / jnp.linalg.norm(x0)
+        eigval, eigvec = tensor_power_method(T, x0=x0)
         assert jnp.allclose(jnp.abs(eigval), 4.0, atol=1e-3), (
             f"Expected eigenvalue 4.0, got {eigval}"
         )

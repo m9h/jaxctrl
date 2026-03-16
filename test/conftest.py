@@ -1,6 +1,11 @@
 """Shared test fixtures for jaxctrl tests."""
 
 import jax
+
+# Enable float64 globally for tests — eigendecomposition-based solvers
+# (CARE, DARE) require double precision for reliable FD gradient checks.
+jax.config.update("jax_enable_x64", True)
+
 import jax.numpy as jnp
 import pytest
 
