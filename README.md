@@ -17,16 +17,22 @@ pip install jaxctrl[hypergraph]
 
 ## Architecture
 
+**Layer 0 — System identification** (data-driven model discovery):
+- `SINDyOptimizer`, `polynomial_library`, `fourier_library`
+- `KoopmanEstimator` (Exact DMD)
+
 **Layer 1 — Control primitives** (missing from JAX, exist in SciPy):
 - `solve_continuous_lyapunov`, `solve_discrete_lyapunov`
 - `solve_continuous_are`, `solve_discrete_are`
 - `lqr`, `dlqr`
 - `controllability_gramian`, `observability_gramian`
 - `is_controllable`, `is_observable`, `is_stabilizable`, `is_detectable`
+- `simulate_lti`, `simulate_closed_loop` (Diffrax adaptive ODE or matrix-exponential fallback)
 
 **Layer 2 — Tensor control** (new mathematics, no implementation exists anywhere):
 - `z_eigenvalues`, `h_eigenvalues`, `spectral_radius`
 - `tensor_unfold`, `tensor_fold`, `einstein_product`, `tensor_contract`
+- `mode_dot`, `hosvd`, `tucker_to_tensor`, `khatri_rao`
 - `solve_arte`, `tensor_lyapunov`, `multilinear_lqr`
 
 **Layer 3 — Hypergraph control** (integrates with hgx):
@@ -38,6 +44,7 @@ pip install jaxctrl[hypergraph]
 ## Quick start
 
 ```python
+import jax
 import jax.numpy as jnp
 import jaxctrl
 
@@ -53,10 +60,12 @@ K, X = jaxctrl.lqr(A, B, Q, R)
 # Controllability analysis
 print(jaxctrl.is_controllable(A, B))  # True
 
-# Hypergraph control (requires hgx)
-import hgx
-hg = hgx.from_incidence(jnp.ones((5, 1)))
-A_sys, B_sys = jaxctrl.hypergraph_linear_system(hg, driver_nodes=jnp.array([0]))
+# Simulate closed-loop response (uses Diffrax if available)
+x0 = jnp.array([2.0, 0.0])
+ts, xs, us = jaxctrl.simulate_closed_loop(A, B, K, x0, T=10.0)
+
+# Differentiate the LQR cost w.r.t. Q
+dJ_dQ = jax.grad(lambda Q: jnp.sum(jaxctrl.lqr(A, B, Q, R)[1]))(Q)
 ```
 
 ## References
