@@ -230,3 +230,70 @@ class TestARTEDifferentiability:
 
         grad_R = jax.grad(f)(R)
         assert jnp.all(jnp.isfinite(grad_R)), f"Gradient has non-finite values: {grad_R}"
+
+
+# -----------------------------------------------------------------------
+# 6. Newton refinement (requires optimistix)
+# -----------------------------------------------------------------------
+
+try:
+    import optimistix  # noqa: F401
+    _HAS_OPTIMISTIX = True
+except ImportError:
+    _HAS_OPTIMISTIX = False
+
+
+@pytest.mark.skipif(not _HAS_OPTIMISTIX, reason="optimistix not installed")
+class TestNewtonRefinement:
+    """Newton refinement should improve or maintain the CARE residual."""
+
+    def _make_system(self):
+        A = jnp.zeros((2, 2, 2))
+        A = A.at[0, 0, 0].set(-2.0)
+        A = A.at[1, 1, 1].set(-3.0)
+        A = A.at[0, 1, 0].set(-0.5)
+        A = A.at[1, 0, 1].set(-0.5)
+        B = jnp.array([[0.0], [1.0]])
+        Q = jnp.eye(2)
+        R = jnp.array([[1.0]])
+        return A, B, Q, R
+
+    def test_refine_does_not_error(self):
+        """solve_arte(refine=True) should not raise."""
+        A, B, Q, R = self._make_system()
+        X = solve_arte(A, B, Q, R, order=3, refine=True)
+        assert jnp.all(jnp.isfinite(X)), f"Refined X has non-finite values: {X}"
+
+    def test_refined_is_symmetric_psd(self):
+        """Refined solution should be symmetric and PSD."""
+        A, B, Q, R = self._make_system()
+        X = solve_arte(A, B, Q, R, order=3, refine=True)
+        assert jnp.allclose(X, X.T, atol=1e-8), "Refined X should be symmetric"
+        eigs = jnp.linalg.eigvalsh(X)
+        assert jnp.all(eigs >= -1e-6), f"Refined X should be PSD, eigs: {eigs}"
+
+    def test_refined_residual_not_worse(self):
+        """Refinement should not increase the CARE residual."""
+        A, B, Q, R = self._make_system()
+        from jaxctrl._tensor_ops import tensor_contract
+
+        n = 2
+        uniform = jnp.ones(n) / jnp.sqrt(n)
+        A_lin = tensor_contract(A, uniform, (2,)).reshape(n, n)
+
+        X_base = solve_arte(A, B, Q, R, order=3, refine=False)
+        X_refined = solve_arte(A, B, Q, R, order=3, refine=True)
+
+        R_inv_BT = jnp.linalg.solve(R, B.T)
+
+        def care_residual(X):
+            return jnp.linalg.norm(
+                A_lin.T @ X + X @ A_lin - X @ B @ R_inv_BT @ X + Q
+            )
+
+        res_base = care_residual(X_base)
+        res_refined = care_residual(X_refined)
+        assert res_refined <= res_base + 1e-6, (
+            f"Refined residual ({res_refined}) should not exceed "
+            f"base residual ({res_base})"
+        )

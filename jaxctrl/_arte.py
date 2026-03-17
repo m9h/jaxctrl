@@ -43,6 +43,14 @@ from jaxtyping import Array, Float
 
 from jaxctrl._lyapunov import solve_continuous_lyapunov
 from jaxctrl._riccati import solve_continuous_are
+
+try:
+    import optimistix as optx
+
+    _HAS_OPTIMISTIX = True
+except ImportError:
+    optx = None  # type: ignore[assignment]
+    _HAS_OPTIMISTIX = False
 from jaxctrl._tensor_ops import tensor_contract, tensor_fold, tensor_unfold
 
 
@@ -119,13 +127,14 @@ def tensor_lyapunov(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(4,))
+@functools.partial(jax.jit, static_argnums=(4, 5))
 def solve_arte(
     A: Float[Array, "..."],
     B: Float[Array, "n m"],
     Q: Float[Array, "..."],
     R: Float[Array, "m m"],
     order: int = 3,
+    refine: bool = False,
 ) -> Float[Array, "..."]:
     """Solve the Algebraic Riccati Tensor Equation (ARTE).
 
@@ -222,7 +231,44 @@ def solve_arte(
     # Solve the standard CARE.
     X = solve_continuous_are(A_lin_mat, B, Q_lin, R)
 
+    # Optional Newton refinement using Optimistix.
+    if refine and _HAS_OPTIMISTIX:
+        X = _newton_refine_care(A_lin_mat, B, Q_lin, R, X)
+
     return X
+
+
+# ---------------------------------------------------------------------------
+# Newton refinement via Optimistix
+# ---------------------------------------------------------------------------
+
+
+def _newton_refine_care(
+    A: Float[Array, "n n"],
+    B: Float[Array, "n m"],
+    Q: Float[Array, "n n"],
+    R: Float[Array, "m m"],
+    X0: Float[Array, "n n"],
+    max_steps: int = 20,
+) -> Float[Array, "n n"]:
+    """Refine a CARE solution via Newton iteration (Optimistix).
+
+    Finds a root of the CARE residual:
+
+        F(X) = A^T X + X A - X B R^{-1} B^T X + Q = 0
+
+    starting from the initial guess *X0*.
+    """
+    R_inv_BT = jnp.linalg.solve(R, B.T)
+
+    def residual(X, args):
+        return A.T @ X + X @ A - X @ B @ R_inv_BT @ X + Q
+
+    solver = optx.Newton(rtol=1e-8, atol=1e-8)
+    sol = optx.root_find(
+        residual, solver, X0, args=None, max_steps=max_steps
+    )
+    return (sol.value + sol.value.T) / 2.0
 
 
 # ---------------------------------------------------------------------------
