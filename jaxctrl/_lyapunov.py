@@ -36,6 +36,17 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 
+try:
+    import lineax as lx
+
+    _HAS_LINEAX = True
+except ImportError:
+    lx = None  # type: ignore[assignment]
+    _HAS_LINEAX = False
+
+# Dispatch threshold: use Lineax iterative solver for n > this value.
+_LINEAX_THRESHOLD = 50
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -77,7 +88,7 @@ def solve_continuous_lyapunov(
     return _solve_continuous_lyapunov_impl(A, Q)
 
 
-def _solve_continuous_lyapunov_impl(
+def _solve_continuous_lyapunov_kron(
     A: Float[Array, "n n"],
     Q: Float[Array, "n n"],
 ) -> Float[Array, "n n"]:
@@ -86,15 +97,50 @@ def _solve_continuous_lyapunov_impl(
     vec(AX + XA^T) = (I kron A + A kron I) vec(X) = -vec(Q)
 
     This is a dense n^2 x n^2 linear system, exact and JIT-friendly.
+    O(n^4) memory, O(n^6) compute — use for n <= 50.
     """
     n = A.shape[0]
     I_n = jnp.eye(n, dtype=A.dtype)
-    # (I kron A) + (A kron I)
     M = jnp.kron(I_n, A) + jnp.kron(A, I_n)
     x = jnp.linalg.solve(M, -Q.ravel())
     X = x.reshape(n, n)
     X = _symmetrise(X)
     return X
+
+
+def _solve_continuous_lyapunov_lineax(
+    A: Float[Array, "n n"],
+    Q: Float[Array, "n n"],
+) -> Float[Array, "n n"]:
+    """Solve AX + XA^T + Q = 0 via Lineax iterative solver (GMRES).
+
+    Expresses the Lyapunov operator as a FunctionLinearOperator and
+    solves with GMRES.  O(n^2) memory, suitable for large n.
+    """
+    n = A.shape[0]
+
+    def lyap_op(X_vec):
+        X = X_vec.reshape(n, n)
+        return (A @ X + X @ A.T).ravel()
+
+    operator = lx.FunctionLinearOperator(
+        lyap_op, jax.ShapeDtypeStruct((n * n,), A.dtype)
+    )
+    sol = lx.linear_solve(
+        operator, -Q.ravel(), solver=lx.GMRES(rtol=1e-6, atol=1e-8)
+    )
+    X = sol.value.reshape(n, n)
+    return _symmetrise(X)
+
+
+def _solve_continuous_lyapunov_impl(
+    A: Float[Array, "n n"],
+    Q: Float[Array, "n n"],
+) -> Float[Array, "n n"]:
+    """Dispatch to Kronecker or Lineax solver based on matrix size."""
+    if _HAS_LINEAX and A.shape[0] > _LINEAX_THRESHOLD:
+        return _solve_continuous_lyapunov_lineax(A, Q)
+    return _solve_continuous_lyapunov_kron(A, Q)
 
 
 def _solve_continuous_lyapunov_fwd(
