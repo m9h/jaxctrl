@@ -888,12 +888,6 @@ class HypergraphControlSystem(eqx.Module):
         Minimises  J = int_0^inf (x^T Q x + u^T R u) dt  subject to
         dx/dt = A x + B u.
 
-        Solves the continuous algebraic Riccati equation (CARE):
-
-            A^T P + P A - P B R^{-1} B^T P + Q = 0
-
-        and returns the optimal gain K = R^{-1} B^T P.
-
         Parameters
         ----------
         Q : (n, n) array
@@ -908,33 +902,6 @@ class HypergraphControlSystem(eqx.Module):
         P : (n, n) array
             Solution of the CARE.
         """
-        A = self.adjacency
-        B = self.input_matrix
+        from jaxctrl._riccati import lqr as _lqr
 
-        # Solve CARE via Hamiltonian eigenvector method.
-        n = A.shape[0]
-        R_inv = jnp.linalg.inv(R)
-        S = B @ R_inv @ B.T
-
-        # Hamiltonian matrix.
-        H = jnp.block([
-            [A, -S],
-            [-Q, -A.T],
-        ])
-
-        eigvals, eigvecs = jnp.linalg.eig(H)
-
-        # Select the n eigenvectors with eigenvalues in the left half-plane.
-        mask = jnp.real(eigvals) < 0
-        # Sort indices so that stable eigenvalues come first.
-        indices = jnp.argsort(~mask)
-        V = eigvecs[:, indices[:n]]
-
-        # P = V_{21} V_{11}^{-1} where V is partitioned into n x n blocks.
-        V11 = V[:n, :]
-        V21 = V[n:, :]
-        P = jnp.real(V21 @ jnp.linalg.inv(V11))
-        P = 0.5 * (P + P.T)  # Ensure symmetry.
-
-        K = R_inv @ B.T @ P
-        return K, P
+        return _lqr(self.adjacency, self.input_matrix, Q, R)
