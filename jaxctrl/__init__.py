@@ -48,6 +48,10 @@ from jaxctrl._controllability import (
     is_stabilizable,
     minimum_energy,
 )
+from jaxctrl._simulate import (
+    simulate_closed_loop,
+    simulate_lti,
+)
 
 # Layer 2: Tensor algebra and control primitives
 from jaxctrl._tensor_ops import (
