@@ -1,0 +1,27 @@
+project:
+  name: jaxctrl
+  title: 'Differentiable control theory in JAX: system identification, Lyapunov, Riccati,
+    Gramians, tensor control, and hypergraph controllability.'
+  short_title: jaxctrl
+authors:
+- name: Morgan G Hough
+  affiliation: Independent Researcher
+  email: morgan.g.hough@gmail.com
+  orcid: ''
+date: '2026-03-20'
+version: 0.1.0
+abstract_source: auto
+keywords: []
+exclude_drafts: false
+bibliography: references.bib
+beamer_theme: metropolis
+scan_paths:
+- .
+exclude_paths:
+- .git
+- .venv
+- node_modules
+- __pycache__
+- manuscript/output
+- .github
+output_dir: manuscript/output

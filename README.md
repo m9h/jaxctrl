@@ -1,3 +1,13 @@
+---
+category: research
+section: introduction
+weight: 10
+title: "jaxctrl: Differentiable Control Theory in JAX"
+status: draft
+slide_summary: "Fully differentiable Lyapunov/Riccati solvers, tensor eigenvalue methods, and hypergraph controllability analysis in JAX — filling gaps between SciPy control and modern autodiff ecosystems."
+tags: [jax, control-theory, lyapunov, riccati, tensor-control, hypergraph, differentiable, system-identification]
+---
+
 # jaxctrl
 
 Differentiable control theory in JAX. Lyapunov and Riccati solvers, controllability analysis, tensor eigenvalues, and hypergraph control — all JIT-compiled and autodiff-compatible.

@@ -6,3 +6,8 @@ dist/
 build/
 .pytest_cache/
 uv.lock
+
+manuscript/output/
+
+autoresearch/results.tsv
+autoresearch/run.log
