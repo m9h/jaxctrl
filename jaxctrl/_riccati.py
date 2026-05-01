@@ -128,19 +128,28 @@ def _solve_care_fwd(A, B, Q, R):
 def _solve_care_bwd(res, g):
     """Adjoint of the CARE via Kao & Hennequin (2020).
 
-    Let K = R^{-1} B^T X  (the optimal gain) and
-    A_cl = A - B K  (the closed-loop matrix, Hurwitz by construction).
+    The CARE residual is
 
-    The adjoint variable S solves the continuous Lyapunov equation:
+        F(X) = A^T X + X A - X B R^{-1} B^T X + Q = 0,
 
-        A_cl^T S + S A_cl + G_sym = 0
+    whose Frechet derivative w.r.t. X is the Lyapunov operator
 
-    Then the parameter gradients are:
+        F'(X) [V] = A_cl^T V + V A_cl,
 
-        dL/dA = S X + X S      (but using the transpose convention: S X^T + S^T X)
-        dL/dB = -2 X S B R^{-1}  (from chain rule through S = B R^{-1} B^T)
-        dL/dQ = -S
-        dL/dR = K S K^T          (= R^{-1} B^T X S X B R^{-1})
+    where K = R^{-1} B^T X is the optimal gain and A_cl = A - B K is the
+    (Hurwitz) closed-loop matrix.  Implicit differentiation gives
+
+        dL/dtheta = -<Lambda, dF/dtheta>,  with  (F'(X))^T Lambda = G_sym.
+
+    The adjoint operator (F'(X))^T maps S to A_cl S + S A_cl^T, so Lambda
+    solves A_cl Lambda + Lambda A_cl^T = G_sym.  The standard continuous
+    Lyapunov solver returns S satisfying A_cl S + S A_cl^T = -G_sym, so
+    Lambda = -S, and substituting into dL/dtheta yields
+
+        dL/dA = X S^T + X^T S
+        dL/dB = -2 X S X B R^{-1}      (= -2 X S K^T)
+        dL/dQ = S
+        dL/dR = K S K^T
     """
     A, B, Q, R, X = res
     G_sym = _symmetrise(g)
@@ -154,10 +163,10 @@ def _solve_care_bwd(res, g):
     S = solve_continuous_lyapunov(A_cl, G_sym)
 
     # Parameter gradients
-    dA = S @ X.T + S.T @ X
-    dB = -2.0 * X @ S @ B @ jnp.linalg.inv(R)
+    dA = X @ S.T + X.T @ S
+    dB = -2.0 * X @ S @ K.T
     dQ = S
-    dR = -(K @ S @ K.T)
+    dR = K @ S @ K.T
 
     return dA, dB, dQ, dR
 
@@ -286,7 +295,7 @@ def _solve_dare_bwd(res, g):
     dA = 2.0 * A_cl.T @ S
     dB = -2.0 * A_cl.T @ S @ F.T
     dQ = S
-    dR = -(F @ S @ F.T)
+    dR = F @ S @ F.T
 
     return dA, dB, dQ, dR
 
