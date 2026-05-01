@@ -72,24 +72,44 @@ def test_care_grad_matches_finite_diff(care_system, param_name):
 
 
 # ----------------------------------------------------------------------
-# DARE / discrete LQR — only R is fixed in this commit; broader DARE
-# adjoint bugs are tracked separately (see TaskList #8).
+# DARE / discrete LQR
 # ----------------------------------------------------------------------
 
 
-def test_dare_grad_R_matches_finite_diff():
+@pytest.fixture
+def dare_system():
     A = jnp.array([[1.0, 0.1], [0.0, 1.0]])
     B = jnp.array([[0.005], [0.1]])
     Q = jnp.eye(2)
     R = jnp.eye(1)
+    return A, B, Q, R
 
-    def f(R_):
-        _, X = jaxctrl.dlqr(A, B, Q, R_)
-        return jnp.trace(X)
 
-    g_ad = jax.grad(f)(R)
-    g_fd = _fd_grad(f, R)
+def _dare_cost(A, B, Q, R):
+    _, X = jaxctrl.dlqr(A, B, Q, R)
+    return jnp.trace(X)
+
+
+@pytest.mark.parametrize("param_name", ["A", "B", "Q", "R"])
+def test_dare_grad_matches_finite_diff(dare_system, param_name):
+    A, B, Q, R = dare_system
+    params = {"A": A, "B": B, "Q": Q, "R": R}
+    target = params[param_name]
+
+    def f(x):
+        local = dict(params)
+        local[param_name] = x
+        return _dare_cost(local["A"], local["B"], local["Q"], local["R"])
+
+    g_ad = jax.grad(f)(target)
+    g_fd = _fd_grad(f, target)
+
+    # Like CARE, the DARE depends only on the symmetric part of Q; compare
+    # symmetric components only.
+    if param_name == "Q":
+        g_ad = (g_ad + g_ad.T) / 2.0
+        g_fd = (g_fd + g_fd.T) / 2.0
 
     assert jnp.allclose(g_ad, g_fd, atol=1e-3), (
-        f"DARE dR: ad={g_ad.tolist()}, fd={g_fd.tolist()}"
+        f"DARE d{param_name}: ad={g_ad.tolist()}, fd={g_fd.tolist()}"
     )

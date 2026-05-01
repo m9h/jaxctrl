@@ -264,20 +264,27 @@ def _solve_dare_fwd(A, B, Q, R):
 def _solve_dare_bwd(res, g):
     """Adjoint of the DARE via implicit differentiation.
 
-    Let F = (R + B^T X B)^{-1} B^T X A  (the optimal gain) and
-    A_cl = A - B F  (closed-loop, Schur-stable by construction).
+    The DARE residual is
 
-    The adjoint variable S solves the discrete Lyapunov equation:
+        F(X) = A^T X A - X - A^T X B (R + B^T X B)^{-1} B^T X A + Q = 0,
 
-        A_cl^T S A_cl - S + G_sym = 0
+    whose Frechet derivative w.r.t. X is the discrete Lyapunov operator
 
-    The parameter gradients follow from the implicit function theorem applied
-    to the DARE residual, mirroring the structure of Kao & Hennequin (2020):
+        F'(X) [V] = A_cl^T V A_cl - V,
 
-        dL/dA = 2 * A_cl^T S
-        dL/dB = -2 * A_cl^T S F^T
-        dL/dQ = -S
-        dL/dR = F S F^T
+    where F_gain = (R + B^T X B)^{-1} B^T X A is the optimal gain and
+    A_cl = A - B F_gain is the (Schur-stable) closed-loop matrix.
+
+    The adjoint operator (F'(X))^T maps S to A_cl S A_cl^T - S, so the
+    adjoint Lambda solves A_cl Lambda A_cl^T - Lambda = G_sym.  The
+    standard discrete Lyapunov solver returns S satisfying
+    A_cl S A_cl^T - S = -G_sym, so Lambda = -S, and the parameter
+    gradients work out to
+
+        dL/dA = 2 X A_cl S
+        dL/dB = -2 X A_cl S F_gain^T
+        dL/dQ = S
+        dL/dR = F_gain S F_gain^T
     """
     A, B, Q, R, X = res
     G_sym = _symmetrise(g)
@@ -292,8 +299,8 @@ def _solve_dare_bwd(res, g):
     S = solve_discrete_lyapunov(A_cl, G_sym)
 
     # Parameter gradients
-    dA = 2.0 * A_cl.T @ S
-    dB = -2.0 * A_cl.T @ S @ F.T
+    dA = X @ A_cl @ S.T + X.T @ A_cl @ S
+    dB = -2.0 * X @ A_cl @ S @ F.T
     dQ = S
     dR = F @ S @ F.T
 
