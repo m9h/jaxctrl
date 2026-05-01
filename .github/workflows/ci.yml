@@ -14,14 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Install Python
         run: uv python install ${{ matrix.python-version }}
       - name: Install dependencies
-        run: uv sync --group dev 2>/dev/null || uv pip install -e ".[dev]"
+        # The PyPI `hgx` package is unrelated to the m9h/hgx referenced by
+        # the hypergraph extra, so we install only solvers + diffrax + tests
+        # in CI and skip test_hypergraph_control.py below.
+        run: uv sync --extra solvers --extra diffrax --extra tests --extra dev
       - name: Ruff check
         run: uv run ruff check jaxctrl/ test/
       - name: Ruff format check
@@ -33,4 +36,4 @@ jobs:
             exit 1
           fi
       - name: Pytest
-        run: uv run pytest test/ -v --tb=short
+        run: uv run pytest test/ --ignore=test/test_hypergraph_control.py -v --tb=short
