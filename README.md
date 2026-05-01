@@ -20,10 +20,11 @@ Built on the [Kidger stack](https://docs.kidger.site): Equinox, Lineax, Optimist
 pip install jaxctrl
 ```
 
-For hypergraph control (requires [hgx](https://github.com/m9h/hgx)):
-```bash
-pip install jaxctrl[hypergraph]
-```
+Optional extras:
+
+- `pip install jaxctrl[solvers]` — pulls in [Lineax](https://github.com/patrick-kidger/lineax) and [Optimistix](https://github.com/patrick-kidger/optimistix). Enables the iterative Lyapunov solver for large systems (n > 50) and Newton refinement for the ARTE solver.
+- `pip install jaxctrl[diffrax]` — pulls in [Diffrax](https://github.com/patrick-kidger/diffrax). Enables adaptive ODE integration in `simulate_lti` and `simulate_closed_loop` (a matrix-exponential fallback is used otherwise).
+- `pip install jaxctrl[hypergraph]` — pulls in [hgx](https://github.com/m9h/hgx). Enables the Layer 3 hypergraph controllability stack.
 
 ## Architecture
 
