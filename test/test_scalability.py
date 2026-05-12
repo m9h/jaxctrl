@@ -12,8 +12,6 @@ from jaxctrl._lyapunov import (
     _HAS_LINEAX,
     _solve_continuous_lyapunov_kron,
     _solve_continuous_lyapunov_impl,
-    _symmetrise,
-    solve_continuous_lyapunov,
 )
 
 pytestmark = pytest.mark.skipif(not _HAS_LINEAX, reason="lineax not installed")
@@ -130,6 +128,4 @@ class TestLineaxLargeScale:
 
         residual = A @ X + X @ A.T + Q
         rel_residual = jnp.linalg.norm(residual) / jnp.linalg.norm(Q)
-        assert rel_residual < 1e-4, (
-            f"Relative residual = {rel_residual}"
-        )
+        assert rel_residual < 1e-4, f"Relative residual = {rel_residual}"

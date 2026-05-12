@@ -16,7 +16,6 @@ Sections
 
 import jax
 import jax.numpy as jnp
-import pytest
 from jaxctrl._tensor_ops import (
     einstein_product,
     hosvd,
@@ -305,12 +304,14 @@ class TestKhatriRao:
         A = jnp.array([[1.0, 2.0], [3.0, 4.0]])
         B = jnp.array([[5.0, 6.0], [7.0, 8.0]])
         result = khatri_rao(A, B)
-        expected = jnp.array([
-            [5.0, 12.0],
-            [7.0, 16.0],
-            [15.0, 24.0],
-            [21.0, 32.0],
-        ])
+        expected = jnp.array(
+            [
+                [5.0, 12.0],
+                [7.0, 16.0],
+                [15.0, 24.0],
+                [21.0, 32.0],
+            ]
+        )
         assert jnp.allclose(result, expected, atol=1e-6), (
             f"Expected:\n{expected}\nGot:\n{result}"
         )
@@ -349,7 +350,7 @@ class TestKhatriRao:
         expected = jnp.concatenate(cols, axis=1)
 
         assert jnp.allclose(result, expected, atol=1e-5), (
-            f"Khatri-Rao does not match manual column-wise Kronecker"
+            "Khatri-Rao does not match manual column-wise Kronecker"
         )
 
 
@@ -382,9 +383,9 @@ class TestModeDot:
     def test_identity_matrix(self):
         """Multiplying by identity along any mode is a no-op."""
         T = jnp.arange(8.0).reshape(2, 2, 2)
-        I = jnp.eye(2)
+        eye = jnp.eye(2)
         for mode in range(3):
-            result = mode_dot(T, I, mode)
+            result = mode_dot(T, eye, mode)
             assert jnp.allclose(result, T, atol=1e-10), (
                 f"Identity mode_dot changed tensor along mode {mode}"
             )

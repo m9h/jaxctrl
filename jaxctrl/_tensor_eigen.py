@@ -112,7 +112,7 @@ def tensor_power_method(
             x0 = jnp.zeros(n).at[0].set(1.0)
 
     # Compute a safe shift from the Frobenius norm.
-    frob = jnp.sqrt(jnp.sum(T ** 2))
+    frob = jnp.sqrt(jnp.sum(T**2))
     alpha = frob  # conservative positive shift
 
     contraction_modes = tuple(range(1, order))
@@ -206,7 +206,7 @@ def z_eigenvalues(
         key = jax.random.PRNGKey(0)
 
     # Compute a safe shift from the Frobenius norm.
-    frob = jnp.sqrt(jnp.sum(T ** 2))
+    frob = jnp.sqrt(jnp.sum(T**2))
     alpha = frob  # conservative positive shift
 
     contraction_modes = tuple(range(1, order))
@@ -217,16 +217,19 @@ def z_eigenvalues(
 
     def _project_out(x, found_vecs, num_found):
         """Project x orthogonal to the first num_found rows of found_vecs."""
+
         def body_fn(i, x_cur):
             vi = found_vecs[i]
             # Only project if i < num_found (mask with where).
             coeff = jnp.dot(x_cur, vi)
             x_proj = x_cur - coeff * vi
             return jnp.where(i < num_found, x_proj, x_cur)
+
         return jax.lax.fori_loop(0, found_vecs.shape[0], body_fn, x)
 
     def _power_method_deflated(x0, found_vecs, num_found):
         """SS-HOPM with orthogonal projection against found eigenvectors."""
+
         def fori_body(i, carry):
             x, lam_prev = carry
             y = tensor_contract(T, x, contraction_modes)
@@ -247,9 +250,7 @@ def z_eigenvalues(
         x0 = jnp.where(norm_x0 > 1e-14, x0 / norm_x0, x0)
 
         lam0 = _eigenvalue(x0)
-        x_final, lam_final = jax.lax.fori_loop(
-            0, max_iters, fori_body, (x0, lam0)
-        )
+        x_final, lam_final = jax.lax.fori_loop(0, max_iters, fori_body, (x0, lam0))
         # Rayleigh quotient refinement.
         lam_final = _eigenvalue(x_final)
         return lam_final, x_final
@@ -380,7 +381,7 @@ def h_eigenvalues(
         x0 = project_lk(x0)
 
         # Step size — heuristic based on tensor norm.
-        lr = 0.01 / jnp.maximum(jnp.sqrt(jnp.sum(T ** 2)), 1.0)
+        lr = 0.01 / jnp.maximum(jnp.sqrt(jnp.sum(T**2)), 1.0)
 
         def body(i, x):
             # Euclidean gradient of Rayleigh quotient.
@@ -398,9 +399,8 @@ def h_eigenvalues(
 
         x_final = jax.lax.fori_loop(0, max_iters, body, x0)
 
-        # Compute the H-eigenvalue: lam = (T x...x)_i / x_i^{k-1}
-        # Use the Rayleigh quotient form which is more stable.
-        Tx = tensor_contract(T, x_final, contraction_modes)
+        # The H-eigenvalue via the Rayleigh quotient form (more stable than
+        # dividing T(x,...,x) componentwise by x_i^{k-1}).
         lam = rayleigh(x_final)
         return lam, x_final
 
@@ -460,13 +460,10 @@ def spectral_radius(
     if key is None:
         key = jax.random.PRNGKey(0)
 
-    n = T.shape[0]
     restart_keys = jax.random.split(key, num_restarts)
 
     def _single_restart(rkey):
-        lam, _ = tensor_power_method(
-            T, max_iters=max_iters, tol=tol, key=rkey
-        )
+        lam, _ = tensor_power_method(T, max_iters=max_iters, tol=tol, key=rkey)
         return jnp.abs(lam)
 
     all_rho = jax.vmap(_single_restart)(restart_keys)

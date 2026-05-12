@@ -42,7 +42,9 @@ def test_frontmatter_required_fields(fname: str) -> None:
 def test_section_value_matches_filename(fname: str) -> None:
     fm = _read_frontmatter(SECTIONS_DIR / fname)
     expected = fname.removesuffix(".md")
-    assert fm["section"] == expected, f"{fname}: section={fm['section']}, expected {expected}"
+    assert fm["section"] == expected, (
+        f"{fname}: section={fm['section']}, expected {expected}"
+    )
 
 
 def test_weights_are_unique_and_ordered() -> None:

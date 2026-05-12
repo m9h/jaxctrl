@@ -56,10 +56,12 @@ class TestSimulateLTI:
         ts, xs = simulate_lti(A, B, x0, u_zero, T=3.0, num_steps=200)
 
         # Analytical: x(t) = [e^{-t}, e^{-2t}]
-        x_analytical = jnp.column_stack([
-            jnp.exp(-ts),
-            jnp.exp(-2 * ts),
-        ])
+        x_analytical = jnp.column_stack(
+            [
+                jnp.exp(-ts),
+                jnp.exp(-2 * ts),
+            ]
+        )
         assert jnp.allclose(xs, x_analytical, atol=0.01), (
             f"Max error: {jnp.max(jnp.abs(xs - x_analytical))}"
         )
@@ -200,9 +202,7 @@ class TestSolverAgreement:
         def u_zero(t, x):
             return jnp.zeros(1)
 
-        ts, xs = simulate_lti(
-            A, B, x0, u_zero, T=3.0, num_steps=100, use_diffrax=False
-        )
+        ts, xs = simulate_lti(A, B, x0, u_zero, T=3.0, num_steps=100, use_diffrax=False)
         assert xs.shape == (101, 2)
         assert jnp.all(jnp.isfinite(xs))
 

@@ -14,7 +14,6 @@ Sections
 
 import jax
 import jax.numpy as jnp
-import pytest
 from jaxctrl._riccati import (
     lqr,
     solve_continuous_are,
@@ -73,13 +72,13 @@ class TestContinuousAREDoubleIntegrator:
         R = jnp.array([[1.0]])
 
         X = solve_continuous_are(A, B, Q, R)
-        expected = jnp.array([
-            [jnp.sqrt(3.0), 1.0],
-            [1.0, jnp.sqrt(3.0)],
-        ])
-        assert jnp.allclose(X, expected, atol=1e-5), (
-            f"Expected:\n{expected}\nGot:\n{X}"
+        expected = jnp.array(
+            [
+                [jnp.sqrt(3.0), 1.0],
+                [1.0, jnp.sqrt(3.0)],
+            ]
         )
+        assert jnp.allclose(X, expected, atol=1e-5), f"Expected:\n{expected}\nGot:\n{X}"
 
     def test_care_solution_is_symmetric(self, double_integrator):
         """The stabilising CARE solution must be symmetric."""
@@ -136,9 +135,7 @@ class TestLQRGain:
         K, X = lqr(A, B, Q, R)
         A_cl = A - B @ K
         eigvals = jnp.linalg.eigvals(A_cl)
-        assert jnp.all(jnp.real(eigvals) < 0), (
-            f"Closed-loop eigenvalues: {eigvals}"
-        )
+        assert jnp.all(jnp.real(eigvals) < 0), f"Closed-loop eigenvalues: {eigvals}"
 
     def test_closed_loop_eigenvalues(self, double_integrator):
         r"""The closed-loop eigenvalues for the double integrator LQR.
@@ -362,6 +359,5 @@ class TestDiscreteARE:
 
         X = solve_discrete_are(A, B, Q, R)
         assert jnp.allclose(X, Q, atol=1e-5), (
-            f"With A=0 the DARE solution should equal Q.\n"
-            f"Expected:\n{Q}\nGot:\n{X}"
+            f"With A=0 the DARE solution should equal Q.\nExpected:\n{Q}\nGot:\n{X}"
         )

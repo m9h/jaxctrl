@@ -52,6 +52,7 @@ _LINEAX_THRESHOLD = 50
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _symmetrise(X: Float[Array, "n n"]) -> Float[Array, "n n"]:
     """Return (X + X^T) / 2."""
     return 0.5 * (X + X.T)
@@ -60,6 +61,7 @@ def _symmetrise(X: Float[Array, "n n"]) -> Float[Array, "n n"]:
 # ---------------------------------------------------------------------------
 # Continuous Lyapunov: A X + X A^T + Q = 0
 # ---------------------------------------------------------------------------
+
 
 @jax.custom_vjp
 def solve_continuous_lyapunov(
@@ -126,9 +128,7 @@ def _solve_continuous_lyapunov_lineax(
     operator = lx.FunctionLinearOperator(
         lyap_op, jax.ShapeDtypeStruct((n * n,), A.dtype)
     )
-    sol = lx.linear_solve(
-        operator, -Q.ravel(), solver=lx.GMRES(rtol=1e-6, atol=1e-8)
-    )
+    sol = lx.linear_solve(operator, -Q.ravel(), solver=lx.GMRES(rtol=1e-6, atol=1e-8))
     X = sol.value.reshape(n, n)
     return _symmetrise(X)
 
@@ -173,13 +173,15 @@ def _solve_continuous_lyapunov_bwd(res, g):
     return dA, dQ
 
 
-solve_continuous_lyapunov.defvjp(_solve_continuous_lyapunov_fwd,
-                                  _solve_continuous_lyapunov_bwd)
+solve_continuous_lyapunov.defvjp(
+    _solve_continuous_lyapunov_fwd, _solve_continuous_lyapunov_bwd
+)
 
 
 # ---------------------------------------------------------------------------
 # Discrete Lyapunov: A X A^T - X + Q = 0
 # ---------------------------------------------------------------------------
+
 
 @jax.custom_vjp
 def solve_discrete_lyapunov(
@@ -276,13 +278,15 @@ def _solve_discrete_lyapunov_bwd(res, g):
     return dA, dQ
 
 
-solve_discrete_lyapunov.defvjp(_solve_discrete_lyapunov_fwd,
-                                _solve_discrete_lyapunov_bwd)
+solve_discrete_lyapunov.defvjp(
+    _solve_discrete_lyapunov_fwd, _solve_discrete_lyapunov_bwd
+)
 
 
 # ---------------------------------------------------------------------------
 # Stability predicates
 # ---------------------------------------------------------------------------
+
 
 def is_stable(A: Float[Array, "n n"]) -> Bool:
     """Check continuous-time stability: all eigenvalues of *A* have Re < 0.
