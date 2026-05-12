@@ -11,7 +11,6 @@ Sections
 
 import jax
 import jax.numpy as jnp
-import pytest
 from jaxctrl._controllability import (
     is_detectable,
     is_stabilizable,
@@ -51,9 +50,7 @@ class TestStabilisability:
         """
         A = jnp.array([[-1.0, 0.0], [0.0, 2.0]])
         B = jnp.array([[0.0], [1.0]])
-        assert is_stabilizable(A, B), (
-            "Uncontrollable stable mode => stabilisable"
-        )
+        assert is_stabilizable(A, B), "Uncontrollable stable mode => stabilisable"
 
     def test_uncontrollable_unstable_mode_not_stabilizable(self):
         r"""Uncontrollable mode is unstable => NOT stabilisable.
@@ -77,9 +74,7 @@ class TestStabilisability:
         """
         A = jnp.diag(jnp.array([-1.0, -2.0, -3.0]))
         B = jnp.array([[1.0], [0.0], [0.0]])
-        assert is_stabilizable(A, B), (
-            "Hurwitz system should be stabilisable with any B"
-        )
+        assert is_stabilizable(A, B), "Hurwitz system should be stabilisable with any B"
 
     def test_complex_eigenvalues(self):
         r"""System with complex conjugate eigenvalues.
@@ -127,9 +122,7 @@ class TestDetectability:
         """
         A = jnp.array([[-3.0, 0.0], [0.0, 1.0]])
         C = jnp.array([[0.0, 1.0]])
-        assert is_detectable(A, C), (
-            "Unobservable stable mode => detectable"
-        )
+        assert is_detectable(A, C), "Unobservable stable mode => detectable"
 
     def test_unobservable_unstable_mode_not_detectable(self):
         r"""Unobservable mode is unstable => NOT detectable.
@@ -140,9 +133,7 @@ class TestDetectability:
         """
         A = jnp.array([[2.0, 0.0], [0.0, -1.0]])
         C = jnp.array([[0.0, 1.0]])
-        assert not is_detectable(A, C), (
-            "Unobservable unstable mode => NOT detectable"
-        )
+        assert not is_detectable(A, C), "Unobservable unstable mode => NOT detectable"
 
 
 # -----------------------------------------------------------------------
@@ -200,7 +191,9 @@ class TestMinimumEnergyExtended:
         T = 1.0
         dE_dT = jax.grad(energy_of_T)(T)
         assert jnp.isfinite(dE_dT), f"dE/dT should be finite, got {dE_dT}"
-        assert dE_dT < 0, f"dE/dT should be negative (more time => less energy), got {dE_dT}"
+        assert dE_dT < 0, (
+            f"dE/dT should be negative (more time => less energy), got {dE_dT}"
+        )
 
     def test_energy_scales_with_distance(self):
         """Energy should scale quadratically with the displacement magnitude.
@@ -217,5 +210,5 @@ class TestMinimumEnergyExtended:
         E2 = minimum_energy(A, B, x0, 2.0 * xf, 1.0)
 
         assert jnp.allclose(E2, 4.0 * E1, rtol=0.05), (
-            f"Energy should scale quadratically: E(2x)={E2}, 4*E(x)={4*E1}"
+            f"Energy should scale quadratically: E(2x)={E2}, 4*E(x)={4 * E1}"
         )

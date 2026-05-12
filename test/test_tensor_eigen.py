@@ -122,9 +122,7 @@ class TestDiagonalTensorEigenvalues:
         eigvals, eigvecs = z_eigenvalues(T)
         eigvals_sorted = jnp.sort(jnp.real(eigvals))
 
-        # The set of Z-eigenvalues should contain 1, 3, 7
-        expected = jnp.array([1.0, 3.0, 7.0])
-        # Check that the largest eigenvalue is 7
+        # The set of Z-eigenvalues should contain 1, 3, 7 — check the largest is 7.
         assert jnp.allclose(eigvals_sorted[-1], 7.0, atol=1e-3), (
             f"Expected largest Z-eigenvalue 7.0, got {eigvals_sorted[-1]}"
         )

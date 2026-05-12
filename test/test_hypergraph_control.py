@@ -11,7 +11,6 @@ Sections
 4. Linear system conversion from hypergraph
 """
 
-import jax
 import jax.numpy as jnp
 import pytest
 
@@ -108,9 +107,7 @@ class TestCompleteHypergraph:
         n = hg.num_nodes
         B = jnp.zeros((n, 1)).at[driver_nodes[0], 0].set(1.0)
         rank, is_ctrl = tensor_kalman_rank(A_t, B)
-        assert is_ctrl, (
-            "Complete hypergraph with driver node 0 should be controllable"
-        )
+        assert is_ctrl, "Complete hypergraph with driver node 0 should be controllable"
 
 
 # -----------------------------------------------------------------------
@@ -143,9 +140,7 @@ class TestPathHypergraph:
         hg = hgx.from_incidence(H)
 
         n_drivers = minimum_driver_nodes(hg)
-        assert n_drivers == 1, (
-            f"Expected 1 driver node for path graph, got {n_drivers}"
-        )
+        assert n_drivers == 1, f"Expected 1 driver node for path graph, got {n_drivers}"
 
     def test_disconnected_needs_two_drivers(self):
         """Two disjoint edges {0,1} and {2,3} need at least 2 driver nodes.
@@ -153,12 +148,14 @@ class TestPathHypergraph:
         H = [[1,0],[1,0],[0,1],[0,1]]
         Two connected components => minimum 2 drivers.
         """
-        H = jnp.array([
-            [1.0, 0.0],
-            [1.0, 0.0],
-            [0.0, 1.0],
-            [0.0, 1.0],
-        ])
+        H = jnp.array(
+            [
+                [1.0, 0.0],
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [0.0, 1.0],
+            ]
+        )
         hg = hgx.from_incidence(H)
 
         n_drivers = minimum_driver_nodes(hg)

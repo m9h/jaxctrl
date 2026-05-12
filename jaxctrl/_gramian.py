@@ -44,6 +44,7 @@ from jaxctrl._lyapunov import solve_continuous_lyapunov
 # Controllability Gramian
 # ======================================================================
 
+
 def controllability_gramian(
     A: Float[Array, "n n"],
     B: Float[Array, "n m"],
@@ -120,6 +121,7 @@ def _finite_horizon_controllability_gramian(
 # Observability Gramian
 # ======================================================================
 
+
 def observability_gramian(
     A: Float[Array, "n n"],
     C: Float[Array, "p n"],
@@ -158,6 +160,7 @@ def observability_gramian(
 # ======================================================================
 # Controllability and Observability matrices (Kalman)
 # ======================================================================
+
 
 def controllability_matrix(
     A: Float[Array, "n n"],

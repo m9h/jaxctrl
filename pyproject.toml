@@ -15,7 +15,7 @@ dependencies = [
 solvers = ["lineax>=0.0.4", "optimistix>=0.0.6"]
 hypergraph = ["hgx>=0.1.0"]
 diffrax = ["diffrax>=0.6.0"]
-dev = ["pre-commit", "ruff"]
+dev = ["pre-commit", "ruff>=0.15,<0.16"]
 tests = ["pytest", "beartype"]
 
 [build-system]
@@ -24,3 +24,16 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 88
+
+[tool.ruff.lint]
+# F722: jaxtyping array-shape strings (e.g. Float[Array, "n n"]) are not valid
+# Python expressions, so pyflakes flags them as forward-annotation syntax errors.
+ignore = ["F722"]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-exports: jaxctrl/__init__.py deliberately imports names for the public API.
+"jaxctrl/__init__.py" = ["F401"]
+# conftest.py manipulates sys.path before importing the package under test;
+# test_hypergraph_control.py guards its import behind an hgx availability check.
+"test/conftest.py" = ["E402"]
+"test/test_hypergraph_control.py" = ["E402"]

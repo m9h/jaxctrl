@@ -45,6 +45,7 @@ _DEFAULT_TOL_FACTOR = 1e-10
 # Controllability
 # ======================================================================
 
+
 def is_controllable(
     A: Float[Array, "n n"],
     B: Float[Array, "n m"],
@@ -78,6 +79,7 @@ def is_controllable(
 # Observability
 # ======================================================================
 
+
 def is_observable(
     A: Float[Array, "n n"],
     C: Float[Array, "p n"],
@@ -109,6 +111,7 @@ def is_observable(
 # ======================================================================
 # Stabilisability (PBH test)
 # ======================================================================
+
 
 def is_stabilizable(
     A: Float[Array, "n n"],
@@ -168,6 +171,7 @@ def is_stabilizable(
 # Detectability (dual PBH test)
 # ======================================================================
 
+
 def is_detectable(
     A: Float[Array, "n n"],
     C: Float[Array, "p n"],
@@ -194,11 +198,12 @@ def is_detectable(
 # Minimum control energy
 # ======================================================================
 
+
 def minimum_energy(
     A: Float[Array, "n n"],
     B: Float[Array, "n m"],
-    x0: Float[Array, "n"],
-    xf: Float[Array, "n"],
+    x0: Float[Array, "n"],  # noqa: F821 — jaxtyping single-axis shape string
+    xf: Float[Array, "n"],  # noqa: F821 — jaxtyping single-axis shape string
     T: Float[Scalar, ""],
     num_steps: int = 100,
 ) -> Float[Scalar, ""]:
@@ -246,6 +251,7 @@ def minimum_energy(
 # ======================================================================
 # Internal helpers
 # ======================================================================
+
 
 def _has_full_row_rank(
     M: Float[Array, "n k"],

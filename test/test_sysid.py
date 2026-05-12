@@ -97,7 +97,6 @@ class TestSINDyLorenz:
     @pytest.fixture
     def lorenz_data(self):
         """Generate Lorenz trajectory via RK4 integration."""
-        import numpy as np
 
         sigma, rho, beta = 10.0, 28.0, 8.0 / 3.0
         dt = 0.001
@@ -106,11 +105,13 @@ class TestSINDyLorenz:
 
         def lorenz_rhs(state):
             x, y, z = state
-            return np.array([
-                sigma * (y - x),
-                x * (rho - z) - y,
-                x * y - beta * z,
-            ])
+            return np.array(
+                [
+                    sigma * (y - x),
+                    x * (rho - z) - y,
+                    x * y - beta * z,
+                ]
+            )
 
         # RK4 integration in float64
         state = np.array([1.0, 1.0, 1.0], dtype=np.float64)
@@ -132,7 +133,9 @@ class TestSINDyLorenz:
     def test_lorenz_recovery(self, lorenz_data):
         """SINDy recovers Lorenz coefficients from clean data."""
         X, dX = lorenz_data
-        lib_fn = lambda x: polynomial_library(x, degree=2)
+
+        def lib_fn(x):
+            return polynomial_library(x, degree=2)
 
         opt = SINDyOptimizer(threshold=0.5, max_iter=10)
         Xi = opt.fit(X, dX, lib_fn)
@@ -157,7 +160,9 @@ class TestSINDyLorenz:
     def test_sparsity(self, lorenz_data):
         """Recovered Xi should be sparse (< 10 nonzero entries)."""
         X, dX = lorenz_data
-        lib_fn = lambda x: polynomial_library(x, degree=2)
+
+        def lib_fn(x):
+            return polynomial_library(x, degree=2)
 
         opt = SINDyOptimizer(threshold=0.5, max_iter=10)
         Xi = opt.fit(X, dX, lib_fn)
@@ -168,7 +173,9 @@ class TestSINDyLorenz:
     def test_predict(self, lorenz_data):
         """Predicted derivatives should match true derivatives."""
         X, dX = lorenz_data
-        lib_fn = lambda x: polynomial_library(x, degree=2)
+
+        def lib_fn(x):
+            return polynomial_library(x, degree=2)
 
         opt = SINDyOptimizer(threshold=0.5, max_iter=10)
         Xi = opt.fit(X, dX, lib_fn)
@@ -199,7 +206,9 @@ class TestSINDyLinearize:
         X = jax.random.normal(key, (500, 2))
         dX = (A_true @ X.T).T
 
-        lib_fn = lambda x: polynomial_library(x, degree=1)
+        def lib_fn(x):
+            return polynomial_library(x, degree=1)
+
         opt = SINDyOptimizer(threshold=0.01, max_iter=5)
         Xi = opt.fit(X, dX, lib_fn)
 
@@ -228,10 +237,12 @@ class TestKoopmanRotation:
     @pytest.fixture
     def rotation_data(self):
         theta = jnp.pi / 4
-        K_true = jnp.array([
-            [jnp.cos(theta), -jnp.sin(theta)],
-            [jnp.sin(theta), jnp.cos(theta)],
-        ])
+        K_true = jnp.array(
+            [
+                [jnp.cos(theta), -jnp.sin(theta)],
+                [jnp.sin(theta), jnp.cos(theta)],
+            ]
+        )
         x0 = jnp.array([1.0, 0.0])
 
         n_steps = 100
@@ -263,9 +274,7 @@ class TestKoopmanRotation:
         _, eigenvalues, _ = est.fit(X, Y)
 
         mags = jnp.abs(eigenvalues)
-        assert jnp.allclose(mags, 1.0, atol=1e-5), (
-            f"Eigenvalue magnitudes: {mags}"
-        )
+        assert jnp.allclose(mags, 1.0, atol=1e-5), f"Eigenvalue magnitudes: {mags}"
 
     def test_eigenvalue_frequency(self, rotation_data):
         """Eigenvalue angles should be +/- pi/4."""
@@ -291,10 +300,12 @@ class TestKoopmanPrediction:
     def test_prediction_rotation(self):
         """Predict 10 steps of a rotation and compare to ground truth."""
         theta = jnp.pi / 6
-        K_true = jnp.array([
-            [jnp.cos(theta), -jnp.sin(theta)],
-            [jnp.sin(theta), jnp.cos(theta)],
-        ])
+        K_true = jnp.array(
+            [
+                [jnp.cos(theta), -jnp.sin(theta)],
+                [jnp.sin(theta), jnp.cos(theta)],
+            ]
+        )
         x0 = jnp.array([1.0, 0.0])
 
         # Generate training data
@@ -321,10 +332,12 @@ class TestKoopmanPrediction:
         """Continuous eigenvalues of a rotation = +/- i*theta/dt."""
         theta = jnp.pi / 4
         dt = 0.01
-        K = jnp.array([
-            [jnp.cos(theta), -jnp.sin(theta)],
-            [jnp.sin(theta), jnp.cos(theta)],
-        ])
+        K = jnp.array(
+            [
+                [jnp.cos(theta), -jnp.sin(theta)],
+                [jnp.sin(theta), jnp.cos(theta)],
+            ]
+        )
 
         eigenvalues = jnp.linalg.eigvals(K)
         omega = KoopmanEstimator.continuous_eigenvalues(eigenvalues, dt)

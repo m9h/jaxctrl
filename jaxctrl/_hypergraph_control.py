@@ -31,7 +31,6 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from jaxctrl._tensor_ops import tensor_unfold
 
 # ---------------------------------------------------------------------------
 # Optional hgx import
@@ -624,7 +623,6 @@ def _compute_energies_for_all_targets(
     n: int,
 ) -> jax.Array:
     """Compute energy to reach each unit vector e_i from the origin."""
-    x0 = jnp.zeros(n, dtype=A.dtype)
     T = jnp.ones((), dtype=A.dtype)
 
     W = _controllability_gramian(A, B, T)

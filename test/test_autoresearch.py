@@ -35,7 +35,9 @@ def _run_experiment() -> str:
 def test_experiment_runs_and_emits_result_line() -> None:
     line = _run_experiment()
     fields = line.split("|")
-    assert len(fields) == 5, f"RESULT line must have 5 fields, got {len(fields)}: {line}"
+    assert len(fields) == 5, (
+        f"RESULT line must have 5 fields, got {len(fields)}: {line}"
+    )
 
 
 def test_status_is_not_placeholder() -> None:

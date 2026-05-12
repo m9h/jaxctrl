@@ -15,7 +15,6 @@ Sections
 
 import jax
 import jax.numpy as jnp
-import pytest
 from jaxctrl._lyapunov import (
     is_schur_stable,
     is_stable,
@@ -57,9 +56,7 @@ class TestContinuousLyapunovKnownAnswer:
 
         X = solve_continuous_lyapunov(A, Q)
         expected = jnp.array([[0.5, 0.0], [0.0, 0.25]])
-        assert jnp.allclose(X, expected, atol=1e-6), (
-            f"Expected:\n{expected}\nGot:\n{X}"
-        )
+        assert jnp.allclose(X, expected, atol=1e-6), f"Expected:\n{expected}\nGot:\n{X}"
 
     def test_solution_is_symmetric(self):
         """The solution X must be symmetric for symmetric Q."""
@@ -162,9 +159,7 @@ class TestDiscreteLyapunovKnownAnswer:
 
         X = solve_discrete_lyapunov(A, Q)
         expected = jnp.array([[4.0 / 3.0, 0.0], [0.0, 100.0 / 91.0]])
-        assert jnp.allclose(X, expected, atol=1e-5), (
-            f"Expected:\n{expected}\nGot:\n{X}"
-        )
+        assert jnp.allclose(X, expected, atol=1e-5), f"Expected:\n{expected}\nGot:\n{X}"
 
     def test_discrete_residual(self):
         """Verify A X A^T - X + Q = 0 for the known-answer system."""

@@ -14,7 +14,6 @@ Sections
 
 import jax
 import jax.numpy as jnp
-import pytest
 from jaxctrl._gramian import (
     controllability_gramian,
     controllability_matrix,
@@ -53,9 +52,7 @@ class TestControllabilityMatrix:
         A, B = double_integrator
         C = controllability_matrix(A, B)
         expected = jnp.array([[0.0, 1.0], [1.0, 0.0]])
-        assert jnp.allclose(C, expected, atol=1e-6), (
-            f"Expected:\n{expected}\nGot:\n{C}"
-        )
+        assert jnp.allclose(C, expected, atol=1e-6), f"Expected:\n{expected}\nGot:\n{C}"
 
     def test_controllability_rank_is_n(self, double_integrator):
         """The controllability matrix has full rank (= n = 2)."""
@@ -158,9 +155,7 @@ class TestControllabilityGramian:
 
         W = controllability_gramian(A, B)
         expected = jnp.array([[0.5, 1.0 / 3.0], [1.0 / 3.0, 0.25]])
-        assert jnp.allclose(W, expected, atol=1e-5), (
-            f"Expected:\n{expected}\nGot:\n{W}"
-        )
+        assert jnp.allclose(W, expected, atol=1e-5), f"Expected:\n{expected}\nGot:\n{W}"
 
     def test_gramian_satisfies_lyapunov(self):
         """Verify A W + W A^T + B B^T = 0."""
@@ -225,9 +220,7 @@ class TestMinimumEnergy:
         T = 1.0
 
         E = minimum_energy(A, B, jnp.zeros_like(x_f), x_f, T)
-        assert jnp.allclose(E, 12.0, atol=0.05), (
-            f"Expected energy 12.0, got {E}"
-        )
+        assert jnp.allclose(E, 12.0, atol=0.05), f"Expected energy 12.0, got {E}"
 
     def test_minimum_energy_easy_direction(self, double_integrator):
         """Energy to reach [0, 1] should be less than [1, 0].
@@ -241,9 +234,7 @@ class TestMinimumEnergy:
         T = 1.0
 
         E = minimum_energy(A, B, jnp.zeros_like(x_f), x_f, T)
-        assert jnp.allclose(E, 4.0, atol=0.05), (
-            f"Expected energy 4.0, got {E}"
-        )
+        assert jnp.allclose(E, 4.0, atol=0.05), f"Expected energy 4.0, got {E}"
 
 
 # -----------------------------------------------------------------------
@@ -266,10 +257,10 @@ class TestObservability:
         A = jnp.array([[0.0, 1.0], [0.0, 0.0]])
         C = jnp.array([[1.0, 0.0]])
 
-        O = observability_matrix(A, C)
+        obs = observability_matrix(A, C)
         expected = jnp.array([[1.0, 0.0], [0.0, 1.0]])
-        assert jnp.allclose(O, expected, atol=1e-6), (
-            f"Expected:\n{expected}\nGot:\n{O}"
+        assert jnp.allclose(obs, expected, atol=1e-6), (
+            f"Expected:\n{expected}\nGot:\n{obs}"
         )
 
     def test_is_observable_double_integrator(self):
@@ -288,9 +279,9 @@ class TestObservability:
         A = jnp.array([[1.0, 0.0], [0.0, 2.0]])
         C = jnp.array([[0.0, 1.0]])
 
-        O = observability_matrix(A, C)
+        obs = observability_matrix(A, C)
         expected = jnp.array([[0.0, 1.0], [0.0, 2.0]])
-        assert jnp.allclose(O, expected, atol=1e-6)
+        assert jnp.allclose(obs, expected, atol=1e-6)
         assert not is_observable(A, C), "Should be unobservable"
 
     def test_observability_gramian_known_answer(self):
@@ -313,9 +304,7 @@ class TestObservability:
 
         W = observability_gramian(A, C)
         expected = jnp.array([[0.5, 1.0 / 3.0], [1.0 / 3.0, 0.25]])
-        assert jnp.allclose(W, expected, atol=1e-5), (
-            f"Expected:\n{expected}\nGot:\n{W}"
-        )
+        assert jnp.allclose(W, expected, atol=1e-5), f"Expected:\n{expected}\nGot:\n{W}"
 
     def test_observability_gramian_residual(self):
         """Verify A^T W + W A + C^T C = 0."""

@@ -262,12 +262,12 @@ def khatri_rao(
     -------
     array, shape (I*J, C)
     """
-    # A[:, None, :] has shape (I, 1, C)
-    # B[None, :, :] has shape (1, J, C)
-    # Element-wise product gives (I, J, C), reshape to (I*J, C).
-    I, C = A.shape
-    J, _ = B.shape
-    return (A[:, None, :] * B[None, :, :]).reshape(I * J, C)
+    # A[:, None, :] has shape (n_i, 1, n_c)
+    # B[None, :, :] has shape (1, n_j, n_c)
+    # Element-wise product gives (n_i, n_j, n_c), reshape to (n_i*n_j, n_c).
+    n_i, n_c = A.shape
+    n_j, _ = B.shape
+    return (A[:, None, :] * B[None, :, :]).reshape(n_i * n_j, n_c)
 
 
 # ---------------------------------------------------------------------------

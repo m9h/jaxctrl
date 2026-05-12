@@ -15,7 +15,6 @@ References
 
 from __future__ import annotations
 
-import functools
 from itertools import combinations_with_replacement
 from typing import Callable, Optional, Tuple
 
@@ -153,9 +152,7 @@ class SINDyOptimizer(eqx.Module):
                     Xi_np[:, j] = 0.0
                     continue
                 # Re-solve on the support columns only
-                xi_s = np.linalg.lstsq(
-                    Theta_np[:, support], dX_np[:, j], rcond=None
-                )[0]
+                xi_s = np.linalg.lstsq(Theta_np[:, support], dX_np[:, j], rcond=None)[0]
                 Xi_np[:, j] = 0.0
                 Xi_np[support, j] = xi_s
 
@@ -308,7 +305,7 @@ class KoopmanEstimator(eqx.Module):
         """
         Phi_pinv = jnp.linalg.pinv(modes)
         b = Phi_pinv @ x0
-        lambda_t = eigenvalues ** t
+        lambda_t = eigenvalues**t
         return jnp.real(modes @ (lambda_t * b))
 
     @staticmethod

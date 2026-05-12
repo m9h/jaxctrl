@@ -110,7 +110,7 @@ def tensor_lyapunov(
         A_sq = jnp.zeros((size, size))
         A_sq = A_sq.at[:nrows, :ncols].set(A_mat)
         Q_sq = jnp.zeros((size, size))
-        Q_sq = Q_sq.at[:Q_mat.shape[0], :Q_mat.shape[1]].set(Q_mat)
+        Q_sq = Q_sq.at[: Q_mat.shape[0], : Q_mat.shape[1]].set(Q_mat)
     else:
         A_sq = A_mat
         Q_sq = Q_mat
@@ -191,19 +191,9 @@ def solve_arte(
     """
     n = A.shape[0]
 
-    # Mode-1 unfolding of A: shape (n, n^{k-1}).
-    A_mat = tensor_unfold(A, 0)
-
-    # For the CARE we need a square A matrix.  The standard approach for
-    # multilinear systems is to linearise: A_lin = A_mat @ (x_eq kron ... kron x_eq).
-    # At the zero equilibrium, this vanishes; so we use the identity
-    # contraction: A_lin_{ij} = sum_I A_{i,j,I} / n^{k-2}.
-    # This captures the "average" linear dynamics.
-    n_cols = A_mat.shape[1]
-    A_lin = A_mat @ jnp.ones(n_cols) / (n_cols / n)
-
-    # A_lin is now (n,); reshape to (n, n) by interpreting as A_lin_{ij}.
-    # More precisely: contract all but modes 0 and 1 with uniform vector.
+    # For the CARE we need a square A matrix.  We linearise the higher-order
+    # term by contracting all modes beyond 0 and 1 with a uniform unit vector,
+    # which captures the "average" linear dynamics around the zero equilibrium.
     contraction_modes = tuple(range(2, A.ndim))
     if len(contraction_modes) > 0:
         uniform = jnp.ones(n) / jnp.sqrt(n)
@@ -265,9 +255,7 @@ def _newton_refine_care(
         return A.T @ X + X @ A - X @ B @ R_inv_BT @ X + Q
 
     solver = optx.Newton(rtol=1e-8, atol=1e-8)
-    sol = optx.root_find(
-        residual, solver, X0, args=None, max_steps=max_steps
-    )
+    sol = optx.root_find(residual, solver, X0, args=None, max_steps=max_steps)
     return (sol.value + sol.value.T) / 2.0
 
 

@@ -34,12 +34,17 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 
-from jaxctrl._lyapunov import solve_continuous_lyapunov, solve_discrete_lyapunov, _symmetrise
+from jaxctrl._lyapunov import (
+    solve_continuous_lyapunov,
+    solve_discrete_lyapunov,
+    _symmetrise,
+)
 
 
 # ======================================================================
 # Continuous ARE
 # ======================================================================
+
 
 @jax.custom_vjp
 def solve_continuous_are(
@@ -89,14 +94,16 @@ def _solve_care_impl(A, B, Q, R):
     n = A.shape[0]
 
     # S = B R^{-1} B^T
-    R_inv_BT = jnp.linalg.solve(R, B.T)        # (m, n)
-    S = B @ R_inv_BT                             # (n, n)
+    R_inv_BT = jnp.linalg.solve(R, B.T)  # (m, n)
+    S = B @ R_inv_BT  # (n, n)
 
     # Hamiltonian
-    H = jnp.block([
-        [A,    -S   ],
-        [-Q,   -A.T ],
-    ])  # (2n, 2n)
+    H = jnp.block(
+        [
+            [A, -S],
+            [-Q, -A.T],
+        ]
+    )  # (2n, 2n)
 
     # Extract the stable invariant subspace of the Hamiltonian.
     # JAX does not expose ordered Schur decomposition (ordschur), so we use
@@ -111,8 +118,8 @@ def _solve_care_impl(A, B, Q, R):
     # Take the first n eigenvectors (corresponding to stable eigenvalues)
     U = eigvecs_sorted[:, :n]
 
-    U1 = U[:n, :]    # top block
-    U2 = U[n:, :]    # bottom block
+    U1 = U[:n, :]  # top block
+    U2 = U[n:, :]  # bottom block
 
     # X = Re(U2 U1^{-1}) — take real part to discard numerical imaginary noise
     X = jnp.real(U2 @ jnp.linalg.inv(U1))
@@ -155,9 +162,9 @@ def _solve_care_bwd(res, g):
     G_sym = _symmetrise(g)
 
     # Closed-loop quantities
-    R_inv_BT = jnp.linalg.solve(R, B.T)   # (m, n)
-    K = R_inv_BT @ X                       # (m, n)
-    A_cl = A - B @ K                       # (n, n)
+    R_inv_BT = jnp.linalg.solve(R, B.T)  # (m, n)
+    K = R_inv_BT @ X  # (m, n)
+    A_cl = A - B @ K  # (n, n)
 
     # Adjoint Lyapunov: A_cl S + S A_cl^T + G_sym = 0
     S = solve_continuous_lyapunov(A_cl, G_sym)
@@ -177,6 +184,7 @@ solve_continuous_are.defvjp(_solve_care_fwd, _solve_care_bwd)
 # ======================================================================
 # Discrete ARE
 # ======================================================================
+
 
 @jax.custom_vjp
 def solve_discrete_are(
@@ -292,8 +300,8 @@ def _solve_dare_bwd(res, g):
     # Closed-loop quantities
     BT_X = B.T @ X
     RBXB = R + BT_X @ B
-    F = jnp.linalg.solve(RBXB, BT_X @ A)   # (m, n) optimal gain
-    A_cl = A - B @ F                          # (n, n) closed-loop
+    F = jnp.linalg.solve(RBXB, BT_X @ A)  # (m, n) optimal gain
+    A_cl = A - B @ F  # (n, n) closed-loop
 
     # Adjoint discrete Lyapunov: A_cl S A_cl^T - S + G_sym = 0
     S = solve_discrete_lyapunov(A_cl, G_sym)
@@ -313,6 +321,7 @@ solve_discrete_are.defvjp(_solve_dare_fwd, _solve_dare_bwd)
 # ======================================================================
 # LQR gain computation
 # ======================================================================
+
 
 def lqr(
     A: Float[Array, "n n"],

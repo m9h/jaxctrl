@@ -13,7 +13,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 from jaxctrl._arte import multilinear_lqr, solve_arte, tensor_lyapunov
-from jaxctrl._tensor_ops import tensor_unfold
 
 
 # -----------------------------------------------------------------------
@@ -213,7 +212,9 @@ class TestARTEDifferentiability:
             return jnp.sum(X)
 
         grad_Q = jax.grad(f)(Q)
-        assert jnp.all(jnp.isfinite(grad_Q)), f"Gradient has non-finite values: {grad_Q}"
+        assert jnp.all(jnp.isfinite(grad_Q)), (
+            f"Gradient has non-finite values: {grad_Q}"
+        )
 
     def test_grad_wrt_R_runs(self):
         """jax.grad through solve_arte w.r.t. R should not error."""
@@ -229,7 +230,9 @@ class TestARTEDifferentiability:
             return jnp.sum(X)
 
         grad_R = jax.grad(f)(R)
-        assert jnp.all(jnp.isfinite(grad_R)), f"Gradient has non-finite values: {grad_R}"
+        assert jnp.all(jnp.isfinite(grad_R)), (
+            f"Gradient has non-finite values: {grad_R}"
+        )
 
 
 # -----------------------------------------------------------------------
@@ -238,6 +241,7 @@ class TestARTEDifferentiability:
 
 try:
     import optimistix  # noqa: F401
+
     _HAS_OPTIMISTIX = True
 except ImportError:
     _HAS_OPTIMISTIX = False
@@ -287,9 +291,7 @@ class TestNewtonRefinement:
         R_inv_BT = jnp.linalg.solve(R, B.T)
 
         def care_residual(X):
-            return jnp.linalg.norm(
-                A_lin.T @ X + X @ A_lin - X @ B @ R_inv_BT @ X + Q
-            )
+            return jnp.linalg.norm(A_lin.T @ X + X @ A_lin - X @ B @ R_inv_BT @ X + Q)
 
         res_base = care_residual(X_base)
         res_refined = care_residual(X_refined)
