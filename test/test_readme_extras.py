@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -19,7 +20,8 @@ def _load_optional_dependencies() -> dict[str, list[str]]:
 
 
 def test_install_section_present() -> None:
-    assert "## Installation" in README.read_text()
+    # Accept an optional emoji/decoration prefix before "Installation" in the heading.
+    assert re.search(r"^##\s+(?:\S+\s+)?Installation\b", README.read_text(), re.MULTILINE)
 
 
 def test_user_facing_extras_documented() -> None:
