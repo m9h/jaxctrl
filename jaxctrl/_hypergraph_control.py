@@ -451,18 +451,17 @@ def _controllability_gramian(
     W : (n, n) array
         Controllability Gramian.
     """
+    # Promote to a common dtype so x64-enabled scalars (T) don't break the
+    # scan carry when A is float32 (and vice versa).
+    dtype = jnp.result_type(A, B, T)
+    A, B, T = A.astype(dtype), B.astype(dtype), jnp.asarray(T, dtype)
     dt = T / num_steps
-    ts = jnp.linspace(0.0, T, num_steps + 1)
+    ts = jnp.linspace(jnp.asarray(0.0, dtype), T, num_steps + 1)
 
     def _integrand(t):
         eAt = jax.scipy.linalg.expm(A * t)
         M = eAt @ B
         return M @ M.T
-
-    # Trapezoidal rule via scan for JIT compatibility.
-    def _scan_fn(W_acc, t):
-        val = _integrand(t)
-        return W_acc + val * dt, None
 
     # Endpoints get half weight (trapezoidal correction).
     W0 = _integrand(ts[0]) * (dt / 2.0)
@@ -475,7 +474,7 @@ def _controllability_gramian(
         return W_acc + _integrand(t) * dt, None
 
     n = A.shape[0]
-    W_interior, _ = lax.scan(_scan_interior, jnp.zeros((n, n), dtype=A.dtype), interior)
+    W_interior, _ = lax.scan(_scan_interior, jnp.zeros((n, n), dtype=dtype), interior)
 
     return W0 + W_interior + Wn
 

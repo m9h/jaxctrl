@@ -8,13 +8,29 @@ slide_summary: "Fully differentiable Lyapunov/Riccati solvers, tensor eigenvalue
 tags: [jax, control-theory, lyapunov, riccati, tensor-control, hypergraph, differentiable, system-identification]
 ---
 
-# jaxctrl
+<div align="center">
 
-Differentiable control theory in JAX. Lyapunov and Riccati solvers, controllability analysis, tensor eigenvalues, and hypergraph control — all JIT-compiled and autodiff-compatible.
+# 🎛️ jaxctrl
 
-Built on the [Kidger stack](https://docs.kidger.site): Equinox, Lineax, Optimistix, Diffrax.
+### Differentiable control theory in JAX
 
-## Installation
+**Lyapunov & Riccati solvers · controllability analysis · tensor eigenvalues · hypergraph control** — all `jit`-compiled, `vmap`-able, and end-to-end autodiff-friendly.
+
+[![CI](https://github.com/m9h/jaxctrl/actions/workflows/ci.yml/badge.svg)](https://github.com/m9h/jaxctrl/actions/workflows/ci.yml)
+&nbsp;![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)
+&nbsp;![Built on JAX](https://img.shields.io/badge/built%20on-JAX-orange.svg)
+&nbsp;![License](https://img.shields.io/badge/license-Apache--2.0-brightgreen.svg)
+&nbsp;[![Code style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
+*Built on the [Kidger stack](https://docs.kidger.site) — Equinox · Lineax · Optimistix · Diffrax.*
+
+</div>
+
+---
+
+> **Why jaxctrl?** SciPy has the classical control solvers but no autodiff; JAX has autodiff but no control solvers. jaxctrl closes the gap — and then pushes past it into *tensor* and *hypergraph* control, where (as far as we know) no other implementation exists.
+
+## 📦 Installation
 
 ```bash
 pip install jaxctrl
@@ -22,17 +38,21 @@ pip install jaxctrl
 
 Optional extras:
 
-- `pip install jaxctrl[solvers]` — pulls in [Lineax](https://github.com/patrick-kidger/lineax) and [Optimistix](https://github.com/patrick-kidger/optimistix). Enables the iterative Lyapunov solver for large systems (n > 50) and Newton refinement for the ARTE solver.
-- `pip install jaxctrl[diffrax]` — pulls in [Diffrax](https://github.com/patrick-kidger/diffrax). Enables adaptive ODE integration in `simulate_lti` and `simulate_closed_loop` (a matrix-exponential fallback is used otherwise).
-- `pip install jaxctrl[hypergraph]` — pulls in [hgx](https://github.com/m9h/hgx). Enables the Layer 3 hypergraph controllability stack.
+| Extra | `pip install jaxctrl[...]` | Pulls in | Enables |
+|---|---|---|---|
+| 🧰 `solvers` | `jaxctrl[solvers]` | [Lineax](https://github.com/patrick-kidger/lineax), [Optimistix](https://github.com/patrick-kidger/optimistix) | Iterative Lyapunov solver for large systems (`n > 50`) and Newton refinement for the ARTE solver |
+| 🌊 `diffrax` | `jaxctrl[diffrax]` | [Diffrax](https://github.com/patrick-kidger/diffrax) | Adaptive ODE integration in `simulate_lti` / `simulate_closed_loop` (matrix-exponential fallback otherwise) |
+| 🕸️ `hypergraph` | `jaxctrl[hypergraph]` | [hgx](https://github.com/m9h/hgx) | The Layer 3 hypergraph controllability stack |
 
-## Architecture
+## 🏗️ Architecture
 
-**Layer 0 — System identification** (data-driven model discovery):
+A four-layer stack — each layer builds on the one below, and every primitive is JIT-compilable and differentiable.
+
+### 🧪 Layer 0 — System identification  ·  *data-driven model discovery*
 - `SINDyOptimizer`, `polynomial_library`, `fourier_library`
 - `KoopmanEstimator` (Exact DMD)
 
-**Layer 1 — Control primitives** (missing from JAX, exist in SciPy):
+### 🎚️ Layer 1 — Control primitives  ·  *the SciPy-control gap, now differentiable*
 - `solve_continuous_lyapunov`, `solve_discrete_lyapunov`
 - `solve_continuous_are`, `solve_discrete_are`
 - `lqr`, `dlqr`
@@ -40,19 +60,19 @@ Optional extras:
 - `is_controllable`, `is_observable`, `is_stabilizable`, `is_detectable`
 - `simulate_lti`, `simulate_closed_loop` (Diffrax adaptive ODE or matrix-exponential fallback)
 
-**Layer 2 — Tensor control** (new mathematics, no implementation exists anywhere):
+### 🧮 Layer 2 — Tensor control  ·  *new mathematics — no other implementation exists*
 - `z_eigenvalues`, `h_eigenvalues`, `spectral_radius`
 - `tensor_unfold`, `tensor_fold`, `einstein_product`, `tensor_contract`
 - `mode_dot`, `hosvd`, `tucker_to_tensor`, `khatri_rao`
 - `solve_arte`, `tensor_lyapunov`, `multilinear_lqr`
 
-**Layer 3 — Hypergraph control** (integrates with hgx):
+### 🕸️ Layer 3 — Hypergraph control  ·  *higher-order networks (integrates with [hgx](https://github.com/m9h/hgx))*
 - `adjacency_tensor`, `laplacian_tensor`
 - `tensor_kalman_rank`, `minimum_driver_nodes`
 - `control_energy`, `controllability_profile`
 - `HypergraphControlSystem`
 
-## Quick start
+## 🚀 Quick start
 
 ```python
 import jax
@@ -79,7 +99,18 @@ ts, xs, us = jaxctrl.simulate_closed_loop(A, B, K, x0, T=10.0)
 dJ_dQ = jax.grad(lambda Q: jnp.sum(jaxctrl.lqr(A, B, Q, R)[1]))(Q)
 ```
 
-## Applications: gene-regulatory networks & cellular dynamics
+## 🗺️ Examples
+
+| File | What it shows |
+|---|---|
+| [`examples/diff_lqr_demo.py`](examples/diff_lqr_demo.py) | `jax.grad` of the LQR cost w.r.t. the state weight `Q`, cross-checked against finite differences |
+| [`examples/tensor_lqr_demo.py`](examples/tensor_lqr_demo.py) | Multilinear LQR via the matricized ARTE solver on an order-3 system tensor |
+| [`examples/repressilator_control_demo.py`](examples/repressilator_control_demo.py) | Quenching the repressilator: linearize a 3-gene ring oscillator → controllability → LQR → quench the *nonlinear* oscillation → `jax.grad` w.r.t. the Hill coefficient |
+| [`examples/sindy_lqr_demo.ipynb`](examples/sindy_lqr_demo.ipynb) | SINDy model discovery from trajectory data, then LQR on the recovered system |
+| [`examples/irma_sindy_lqr.ipynb`](examples/irma_sindy_lqr.ipynb) | A gene-regulatory network end-to-end: simulate an IRMA-topology Hill-ODE → `SINDyOptimizer` linear surrogate → controllability → LQR "drug input" steering the network back to switch-off → `jax.grad` of the control cost w.r.t. a feedback edge |
+| [`examples/grn_hypergraph_drivers.ipynb`](examples/grn_hypergraph_drivers.ipynb) | Layer 3 on a GRN-as-hypergraph: `minimum_driver_nodes`, per-TF `controllability_profile`, the `control_energy` landscape over driver sets, and `HypergraphControlSystem` + LQR — "which TFs must I perturb to control this regulon?" |
+
+## 🧬 Applications: gene-regulatory networks & cellular dynamics
 
 GRNs and cellular dynamics map cleanly onto the four layers — the whole *"identify a surrogate
 model → do control theory on it"* pipeline is what Layers 0–1 are for, and the hypergraph layer
@@ -112,7 +143,7 @@ driver nodes → `jax.grad` for sensitivities*. For Boolean GRNs, take a continu
 (Downstream, e.g. in [`anatomical-compiler`](https://github.com/m9h/anatomical-compiler), jaxctrl is
 the controller-synthesis layer on top of a learned Hypergraph Neural ODE surrogate.)
 
-## References
+## 📚 References
 
 - Kao & Hennequin (2020). "Automatic differentiation of Sylvester, Lyapunov, and algebraic Riccati equations." [arXiv:2011.11430](https://arxiv.org/abs/2011.11430)
 - Elowitz & Leibler (2000). "A synthetic oscillatory network of transcriptional regulators." Nature 403, 335–338.
