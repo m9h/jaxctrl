@@ -29,6 +29,12 @@ from jaxctrl._contrastive import (
     info_nce,
 )
 
+# Governing equations from latent dynamics (DYSCO)
+from jaxctrl._dysco import (
+    DYSCO,
+    LatentFlow,
+)
+
 # Layer 1: Control-theoretic matrix equation solvers
 from jaxctrl._lyapunov import (
     is_schur_stable,
