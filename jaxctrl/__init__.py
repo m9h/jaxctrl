@@ -22,6 +22,13 @@ from jaxctrl._sysid import (
     polynomial_library,
 )
 
+# Contrastive system identification (CEBRA-style)
+from jaxctrl._contrastive import (
+    CEBRA,
+    ContrastiveEncoder,
+    info_nce,
+)
+
 # Layer 1: Control-theoretic matrix equation solvers
 from jaxctrl._lyapunov import (
     is_schur_stable,
