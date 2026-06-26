@@ -35,6 +35,18 @@ from jaxctrl._dysco import (
     LatentFlow,
 )
 
+# Langevin / Fokker-Planck system identification (drift + diffusion + solenoidal)
+from jaxctrl._langevin import (
+    LinearLangevin,
+    fit_linear_langevin,
+    langevin_gradient_part,
+    langevin_solenoidal_part,
+    langevin_entropy_production,
+    langevin_solenoidal_frequency,
+    transition_flux,
+    discrete_entropy_production,
+)
+
 # Layer 1: Control-theoretic matrix equation solvers
 from jaxctrl._lyapunov import (
     is_schur_stable,
