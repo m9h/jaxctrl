@@ -35,13 +35,18 @@ from jaxctrl._dysco import (
     LatentFlow,
 )
 
-# Donoho optimal denoising (rank selection + covariance shrinkage)
+# Donoho optimal denoising (rank selection + covariance shrinkage) and the
+# Donoho-Tanner sparse-recovery phase transition (identifiability of sparse fits)
 from jaxctrl._denoise import (
     svht_coefficient,
     svht_rank,
     svht_denoise,
     optimal_shrinkage_denoise,
     shrink_covariance,
+    l1_statistical_dimension,
+    donoho_tanner_threshold,
+    donoho_tanner_regime,
+    DonohoTannerRegime,
 )
 
 # Langevin / Fokker-Planck system identification (drift + diffusion + solenoidal)

@@ -19,6 +19,9 @@ Methods
 
 from __future__ import annotations
 
+import math
+from typing import NamedTuple
+
 import jax.numpy as jnp
 import numpy as np
 
@@ -143,3 +146,143 @@ def shrink_covariance(S, n_samples: int, loss: str = "operator") -> jnp.ndarray:
     else:
         eta[above] = ell
     return jnp.asarray((V * (eta * v)) @ V.T)
+
+
+# ---------------------------------------------------------------------------
+# Donoho-Tanner sparse-recovery phase transition (identifiability of sparse fits)
+# ---------------------------------------------------------------------------
+#
+# The companion to svht/shrinkage on the *estimation* side: an identifiability
+# diagnostic for sparse fits (SINDy coefficient matrices, sparse Langevin /
+# Kramers-Moyal drift libraries).  Given a regression with ``n`` measurements,
+# an ambient library of ``N`` candidate terms and a ``k``-sparse target, the
+# Donoho-Tanner phase transition says whether ℓ1 (LASSO/STLSQ) can recover the
+# support at all.  Computed via the statistical dimension of the ℓ1 descent cone
+# (Amelunxen, Lotz, McCoy & Tropp 2014, "Living on the edge"), which coincides
+# with the Donoho-Tanner *weak* threshold for noiseless Gaussian designs.
+#
+# Caveat for SINDy/Langevin: the theory assumes a (near-)Gaussian / rotationally
+# invariant design.  Polynomial-feature libraries are strongly *correlated*, so
+# this is the optimistic / information-theoretic bound — being above the curve is
+# necessary, not sufficient; a correlated library needs strictly more samples.
+
+_SQRT2 = math.sqrt(2.0)
+_SQRT2PI = math.sqrt(2.0 * math.pi)
+_erfc_vec = np.frompyfunc(math.erfc, 1, 1)
+
+
+def _phi(t: np.ndarray) -> np.ndarray:
+    """Standard-normal pdf."""
+    return np.exp(-0.5 * t ** 2) / _SQRT2PI
+
+
+def _Q(t: np.ndarray) -> np.ndarray:
+    """Standard-normal upper tail 1 - Φ(t) = ½ erfc(t/√2) (vectorised)."""
+    return 0.5 * _erfc_vec(t / _SQRT2).astype(float)
+
+
+def l1_statistical_dimension(rho: float) -> float:
+    """Normalised statistical dimension δ(ρ) of the ℓ1-norm descent cone at a
+    point of relative sparsity ``rho = k/N`` (Amelunxen-Lotz-McCoy-Tropp 2014).
+
+    Equals the Donoho-Tanner *weak* phase-transition threshold for noiseless ℓ1
+    recovery: a ``k``-sparse vector in ``R^N`` is recoverable from ``n`` Gaussian
+    measurements with high probability iff ``n / N > δ(ρ)``.  Monotone increasing
+    on ``[0, 1]`` with ``δ(0)=0``, ``δ(1)=1`` and ``δ(ρ) ≥ ρ``.
+
+        δ(ρ) = min_{τ≥0} ρ(1+τ²) + (1-ρ)·2[(1+τ²)Q(τ) - τφ(τ)]
+
+    where ``φ`` is the standard-normal pdf and ``Q = 1-Φ`` its upper tail; the
+    bracket is ``∫_τ^∞ (u-τ)² φ(u) du``.
+    """
+    rho = float(rho)
+    if rho <= 0.0:
+        return 0.0
+    if rho >= 1.0:
+        return 1.0
+    tau = np.linspace(0.0, 12.0, 6001)
+    moment = (1.0 + tau ** 2) * _Q(tau) - tau * _phi(tau)   # ∫_τ^∞ (u-τ)² φ du
+    obj = rho * (1.0 + tau ** 2) + (1.0 - rho) * 2.0 * moment
+    return float(np.min(obj))
+
+
+def donoho_tanner_threshold(delta: float) -> float:
+    """Donoho-Tanner *weak* phase-transition curve ``ρ_W(δ) = k/n`` for noiseless
+    ℓ1 recovery from an undersampling fraction ``delta = n/N``.
+
+    The largest sparsity (relative to the *measurements*) whose support ℓ1 still
+    recovers w.h.p.  Obtained by inverting :func:`l1_statistical_dimension`:
+    ``ρ_W(δ) = ψ⁻¹(δ) / δ``.  Increasing, with ``ρ_W(1)=1`` and ``ρ_W(δ)→0`` as
+    ``δ→0``.  Canonical anchor: ``ρ_W(0.5) ≈ 0.385``.
+    """
+    delta = float(delta)
+    if delta <= 0.0:
+        return 0.0
+    if delta >= 1.0:
+        return 1.0
+    lo, hi = 0.0, 1.0                       # ψ is increasing -> bisection inverse
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if l1_statistical_dimension(mid) < delta:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi) / delta
+
+
+class DonohoTannerRegime(NamedTuple):
+    """Where a sparse fit sits relative to the Donoho-Tanner weak threshold.
+
+    Fields
+    ------
+    n_measurements, n_features, n_active : the regression geometry (n, N, k).
+    delta : ``n/N`` undersampling fraction (DT x-axis).
+    rho : ``k/n`` sparsity relative to measurements (DT y-axis).
+    rho_crit : ``ρ_W(δ)`` weak threshold at this ``delta``.
+    margin : ``rho_crit - rho`` — positive ⇔ identifiable, by how much.
+    min_measurements : ``⌈N·δ(k/N)⌉`` — fewest Gaussian measurements that recover
+        the support; the binding sample count.
+    headroom : ``n / min_measurements`` — oversampling factor (>1 ⇔ identifiable).
+    identifiable : ``n > N·δ(k/N)`` — the exact statistical-dimension condition.
+    """
+
+    n_measurements: int
+    n_features: int
+    n_active: int
+    delta: float
+    rho: float
+    rho_crit: float
+    margin: float
+    min_measurements: int
+    headroom: float
+    identifiable: bool
+
+
+def donoho_tanner_regime(n_measurements: int, n_features: int,
+                         n_active: int) -> DonohoTannerRegime:
+    """Classify a sparse-recovery problem against the Donoho-Tanner weak curve.
+
+    Parameters
+    ----------
+    n_measurements : rows of the design (samples / time points), ``n``.
+    n_features : columns of the design (library size), ``N``.
+    n_active : number of nonzero coefficients in the target, ``k``.
+
+    Returns
+    -------
+    DonohoTannerRegime
+    """
+    n, N, k = int(n_measurements), int(n_features), int(n_active)
+    delta = n / N
+    rho = k / n if n > 0 else float("inf")
+    rho_crit = donoho_tanner_threshold(delta)
+    stat = l1_statistical_dimension(k / N)
+    min_meas = int(np.ceil(N * stat))
+    return DonohoTannerRegime(
+        n_measurements=n, n_features=N, n_active=k,
+        delta=delta, rho=rho, rho_crit=rho_crit,
+        margin=rho_crit - rho,
+        min_measurements=min_meas,
+        headroom=n / min_meas if min_meas > 0 else float("inf"),
+        identifiable=n > N * stat,
+    )
