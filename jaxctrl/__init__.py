@@ -35,6 +35,15 @@ from jaxctrl._dysco import (
     LatentFlow,
 )
 
+# Donoho optimal denoising (rank selection + covariance shrinkage)
+from jaxctrl._denoise import (
+    svht_coefficient,
+    svht_rank,
+    svht_denoise,
+    optimal_shrinkage_denoise,
+    shrink_covariance,
+)
+
 # Langevin / Fokker-Planck system identification (drift + diffusion + solenoidal)
 from jaxctrl._langevin import (
     LinearLangevin,
