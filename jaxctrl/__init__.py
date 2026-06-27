@@ -61,6 +61,15 @@ from jaxctrl._langevin import (
     discrete_entropy_production,
 )
 
+# Lévy area / irreversible circulation (rough-path twin of the solenoidal drift)
+from jaxctrl._circulation import (
+    levy_area,
+    levy_rate,
+    circulation_strength,
+    expected_levy_rate,
+    solenoidal_circulation,
+)
+
 # Layer 1: Control-theoretic matrix equation solvers
 from jaxctrl._lyapunov import (
     is_schur_stable,
