@@ -326,3 +326,90 @@ class KoopmanEstimator(eqx.Module):
     def is_stable(eigenvalues: jax.Array) -> jax.Array:
         """Check discrete-time stability (all |lambda| < 1)."""
         return jnp.all(jnp.abs(eigenvalues) < 1.0)
+
+
+# ---------------------------------------------------------------------------
+# S-map / EDM (sequential locally-weighted linear maps; Sugihara 1994)
+# ---------------------------------------------------------------------------
+
+
+def smap_predict(
+    library_X: jax.Array,
+    library_Y: jax.Array,
+    query_X: jax.Array,
+    theta: float,
+    ridge: float = 1e-6,
+) -> jax.Array:
+    """S-map forecast: a locally-weighted (by ``theta``) linear map per query point.
+
+    For each query the library points are weighted ``w_i = exp(-theta·d_i/d̄)`` (d_i
+    the distance to library point i, d̄ their mean) and a ridge-regularised linear
+    map is fit and applied.  ``theta=0`` is a single global linear map; larger
+    ``theta`` localises to a state-dependent (nonlinear) map.
+
+    Parameters
+    ----------
+    library_X : (L, d) library states.
+    library_Y : (L, p) library targets (e.g. the lag-ahead state).
+    query_X : (M, d) query states.
+    theta : locality parameter (>= 0).
+    ridge : Tikhonov regularisation for the weighted normal equations.
+
+    Returns
+    -------
+    (M, p) predictions.
+    """
+    library_X = jnp.asarray(library_X)
+    library_Y = jnp.asarray(library_Y)
+    query_X = jnp.asarray(query_X)
+    L, d = library_X.shape
+    Xa = jnp.concatenate([jnp.ones((L, 1)), library_X], axis=1)          # (L, d+1)
+    dist = jnp.sqrt(jnp.maximum(
+        jnp.sum((query_X[:, None, :] - library_X[None, :, :]) ** 2, axis=-1), 0.0))
+    dbar = jnp.mean(dist, axis=1, keepdims=True) + 1e-12                 # (M, 1)
+    W = jnp.exp(-theta * dist / dbar)                                    # (M, L)
+    # per-query weighted ridge: beta = (Xaᵀ W Xa + ridge I)⁻¹ Xaᵀ W Y
+    A = jnp.einsum("ml,lj,lk->mjk", W, Xa, Xa) + ridge * jnp.eye(d + 1)
+    b = jnp.einsum("ml,lj,lp->mjp", W, Xa, library_Y)
+    beta = jnp.linalg.solve(A, b)                                       # (M, d+1, p)
+    qa = jnp.concatenate([jnp.ones((query_X.shape[0], 1)), query_X], axis=1)
+    return jnp.einsum("mj,mjp->mp", qa, beta)
+
+
+def smap_nonlinearity(
+    Z: jax.Array,
+    thetas,
+    lag: int = 1,
+    library_frac: float = 0.5,
+    ridge: float = 1e-6,
+    theiler: int = 10,
+    max_pts: int = 2000,
+) -> jax.Array:
+    """S-map forecast skill ρ(θ) — a *positive* nonlinearity / determinism test.
+
+    Standardises ``Z`` (T, d), predicts the ``lag``-ahead state from a library (first
+    ``library_frac`` of the record) on a held-out query set (with a ``theiler`` gap),
+    and returns the mean cross-correlation skill for each θ in ``thetas``.  Skill that
+    *rises* with θ ⇒ state-dependent (nonlinear, deterministic) dynamics; flat/falling
+    ⇒ a global linear map suffices (linear / stochastic).  Library and query are
+    strided to ``max_pts`` points to bound the O(L·M) cost.
+    """
+    Z = jnp.asarray(Z)
+    Z = (Z - jnp.mean(Z, axis=0)) / (jnp.std(Z, axis=0) + 1e-12)
+    X, Y = Z[:-lag], Z[lag:]
+    n = X.shape[0]
+    nlib = int(n * library_frac)
+    li = jnp.linspace(0, nlib - 1, min(max_pts, nlib)).astype(int)
+    qi = jnp.linspace(nlib + theiler, n - 1,
+                      min(max_pts, n - nlib - theiler)).astype(int)
+    libX, libY, qX, qY = X[li], Y[li], X[qi], Y[qi]
+
+    def skill(theta):
+        pred = smap_predict(libX, libY, qX, float(theta), ridge)
+        pc = pred - jnp.mean(pred, axis=0)
+        yc = qY - jnp.mean(qY, axis=0)
+        num = jnp.sum(pc * yc, axis=0)
+        den = jnp.sqrt(jnp.sum(pc ** 2, axis=0) * jnp.sum(yc ** 2, axis=0)) + 1e-12
+        return jnp.mean(num / den)
+
+    return jnp.stack([skill(float(t)) for t in np.asarray(thetas)])

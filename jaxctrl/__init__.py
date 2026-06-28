@@ -20,6 +20,8 @@ from jaxctrl._sysid import (
     SINDyOptimizer,
     fourier_library,
     polynomial_library,
+    smap_predict,
+    smap_nonlinearity,
 )
 
 # Contrastive system identification (CEBRA-style)
