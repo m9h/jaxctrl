@@ -72,6 +72,14 @@ from jaxctrl._circulation import (
     solenoidal_circulation,
 )
 
+# JAX-native Gaussian multivariate transfer entropy + permutation tests
+from jaxctrl._information import (
+    gaussian_cmi,
+    transfer_entropy,
+    mvte_matrix,
+    te_permutation_test,
+)
+
 # Layer 1: Control-theoretic matrix equation solvers
 from jaxctrl._lyapunov import (
     is_schur_stable,
