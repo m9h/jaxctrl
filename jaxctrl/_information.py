@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 
 def _as2d(x):
@@ -78,16 +79,16 @@ def mvte_matrix(data, source_lags=(1, 2), target_lags=(1, 2), ridge=1e-6):
     single ``vmap`` over all ordered pairs (compiles once)."""
     data = jnp.asarray(data)
     n = data.shape[1]
-    pairs = jnp.array([(s, t) for s in range(n) for t in range(n) if s != t])
-    cond_idx = jnp.array([[j for j in range(n) if j != s and j != t]
-                          for s, t in [(int(p[0]), int(p[1])) for p in pairs]])
+    pairs = np.array([(s, t) for s in range(n) for t in range(n) if s != t])  # static (concrete)
+    cond_idx = np.array([[j for j in range(n) if j != s and j != t] for s, t in pairs])
 
     def one(pair, cidx):
         cond = data[:, cidx] if cidx.shape[0] > 0 else None
         return transfer_entropy(data[:, pair[0]], data[:, pair[1]], cond,
                                 source_lags, target_lags, ridge)
 
-    vals = jax.vmap(one)(pairs, cond_idx)
+    vals = jax.vmap(one)(jnp.asarray(pairs), jnp.asarray(cond_idx))
+    pairs = jnp.asarray(pairs)
     return jnp.zeros((n, n)).at[pairs[:, 0], pairs[:, 1]].set(vals)
 
 
